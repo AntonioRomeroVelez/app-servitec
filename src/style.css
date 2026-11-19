@@ -1,0 +1,85 @@
+@import 'tailwindcss';
+
+/* Paleta Ferisel Security Solutions: azul de marca, azul marino y amarillo de acento */
+@theme {
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-300: #8dc1fb;
+  --color-brand-400: #4fa3f0;
+  --color-brand-500: #1f7be8;
+  --color-brand-600: #1565d8;
+  --color-brand-700: #0f4fb0;
+  --color-brand-800: #0b3a85;
+  --color-brand-900: #0a2a5e;
+  --color-brand-950: #06173a;
+  --color-acento: #f6c915;
+  --color-acento-600: #d9ae08;
+  --color-acento-texto: #06173a; /* texto legible sobre el acento: se recalcula al cambiar el color de acento */
+}
+
+@layer base {
+  body {
+    @apply bg-brand-50 text-brand-950 antialiased;
+  }
+}
+
+/* Piezas reutilizables (mobile-first: 44px+ de alto táctil) */
+@utility campo {
+  @apply min-h-11 w-full rounded-xl border border-brand-200 bg-white px-3 py-2.5 text-base outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-300;
+}
+@utility etiqueta {
+  @apply grid gap-1 text-sm font-medium text-brand-800;
+}
+@utility btn {
+  @apply inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-brand-600 px-4 font-semibold text-white active:bg-brand-700 disabled:opacity-60 sm:flex-none sm:min-w-36;
+}
+@utility btn-borde {
+  @apply btn border border-brand-600 bg-transparent text-brand-700 active:bg-brand-100;
+}
+@utility btn-peligro {
+  @apply btn border border-red-600 bg-transparent text-red-700 active:bg-red-50;
+}
+@utility btn-acento {
+  @apply btn bg-acento text-acento-texto active:bg-acento-600;
+}
+@utility tarjeta {
+  @apply rounded-2xl border border-brand-100 bg-white p-4 shadow-sm;
+}
+
+/* Impresión / "Guardar como PDF" de informes */
+@page {
+  size: A4;
+  margin: 14mm;
+}
+@media print {
+  body {
+    background: #fff;
+  }
+}
+
+/* Menú lateral: el panel entra desde la izquierda y el fondo se oscurece suavemente */
+.cajon-enter-active,
+.cajon-leave-active {
+  transition: transform 0.2s ease;
+}
+.cajon-enter-from,
+.cajon-leave-to {
+  transform: translateX(-100%);
+}
+.fundido-enter-active,
+.fundido-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fundido-enter-from,
+.fundido-leave-to {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cajon-enter-active,
+  .cajon-leave-active,
+  .fundido-enter-active,
+  .fundido-leave-active {
+    transition: none;
+  }
+}
