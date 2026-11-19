@@ -4,7 +4,11 @@ import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { APP } from './src/app.js'
 
+// VITE_BASE: subcarpeta donde se publica la app (p. ej. /app-servitec/ en GitHub Pages). Por defecto, en la raíz.
+const base = process.env.VITE_BASE || '/'
+
 export default defineConfig({
+  base,
   plugins: [
     vue(),
     tailwindcss(),
@@ -23,9 +27,13 @@ export default defineConfig({
         theme_color: '#0b3a85',
         background_color: '#0b3a85',
         display: 'standalone',
+        display_override: ['standalone', 'minimal-ui'], // sin barras del navegador; si no se puede, la mínima
         orientation: 'portrait',
-        start_url: '/',
-        scope: '/',
+        id: base,
+        start_url: base,
+        scope: base,
+        categories: ['business', 'productivity'],
+        prefer_related_applications: false,
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -33,7 +41,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        navigateFallback: '/index.html',
+        navigateFallback: `${base}index.html`,
         cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,png,svg,ico,webmanifest}'],
       },

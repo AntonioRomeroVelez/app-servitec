@@ -1,11 +1,12 @@
-// Genera los iconos de la app instalable (PWA) en /public: un candado con los colores de Ferisel.
-// Uso: node scripts/generar-iconos.mjs   (los PNG generados se guardan en el repositorio)
+// Genera los iconos de la app instalable (PWA) en /public: un informe (portapapeles) con el visto de "revisado",
+// con los colores de la marca. Uso: node scripts/generar-iconos.mjs   (los PNG generados se guardan en el repositorio)
 import zlib from 'node:zlib'
 import fs from 'node:fs'
 import path from 'node:path'
 
 const AZUL = [11, 58, 133] // brand-800
 const AZUL_CLARO = [21, 101, 216] // brand-600
+const AZUL_SUAVE = [191, 219, 254] // brand-200
 const AMARILLO = [246, 201, 21] // acento
 const BLANCO = [255, 255, 255]
 
@@ -17,6 +18,12 @@ const cajaRedondeada = (x, y, cx, cy, mx, my, r) => {
 }
 const circulo = (x, y, cx, cy, r) => Math.hypot(x - cx, y - cy) - r
 const rect = (x, y, x0, y0, x1, y1) => Math.max(x0 - x, x - x1, y0 - y, y - y1)
+const segmento = (x, y, ax, ay, bx, by, grosor) => {
+  const dx = bx - ax
+  const dy = by - ay
+  const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy)))
+  return Math.hypot(x - (ax + t * dx), y - (ay + t * dy)) - grosor / 2
+}
 
 // Pixel (colores en [r,g,b]) dentro de una escala de contenido (para el área segura de los iconos "maskable")
 function color(u, v, escala, redondeado) {
@@ -26,16 +33,19 @@ function color(u, v, escala, redondeado) {
 
   let c = AZUL.map((a, i) => a + (AZUL_CLARO[i] - a) * v * 0.9) // degradado vertical suave
 
-  // grillete del candado (arco superior + dos patas)
-  const arco = Math.max(circulo(x, y, 0.5, 0.4, 0.17), -circulo(x, y, 0.5, 0.4, 0.105), y - 0.4)
-  const patas = Math.min(rect(x, y, 0.33, 0.4, 0.395, 0.52), rect(x, y, 0.605, 0.4, 0.67, 0.52))
-  if (Math.min(arco, patas) < 0) c = BLANCO
+  // hoja del informe
+  if (cajaRedondeada(x, y, 0.45, 0.52, 0.215, 0.285, 0.05) < 0) c = BLANCO
+  // pinza del portapapeles
+  if (cajaRedondeada(x, y, 0.45, 0.255, 0.1, 0.05, 0.03) < 0) c = AZUL
+  if (cajaRedondeada(x, y, 0.45, 0.255, 0.055, 0.02, 0.012) < 0) c = AZUL_SUAVE
+  // renglones del informe
+  for (const ry of [0.4, 0.49, 0.58]) {
+    if (cajaRedondeada(x, y, 0.4, ry, 0.12, 0.016, 0.016) < 0) c = AZUL_SUAVE
+  }
 
-  // cuerpo del candado
-  if (cajaRedondeada(x, y, 0.5, 0.62, 0.22, 0.17, 0.05) < 0) c = AMARILLO
-
-  // ojo de la cerradura
-  if (Math.min(circulo(x, y, 0.5, 0.6, 0.034), rect(x, y, 0.483, 0.6, 0.517, 0.69)) < 0) c = AZUL
+  // sello de "revisado": círculo amarillo con visto
+  if (circulo(x, y, 0.655, 0.7, 0.165) < 0) c = AMARILLO
+  if (segmento(x, y, 0.585, 0.705, 0.635, 0.755, 0.042) < 0 || segmento(x, y, 0.635, 0.755, 0.735, 0.645, 0.042) < 0) c = AZUL
   return c
 }
 
@@ -96,7 +106,7 @@ fs.mkdirSync(destino, { recursive: true })
 const iconos = [
   ['icon-192.png', 192, 1, true],
   ['icon-512.png', 512, 1, true],
-  ['icon-maskable-512.png', 512, 0.72, false], // a sangre y con el candado dentro del área segura
+  ['icon-maskable-512.png', 512, 0.78, false], // a sangre y con el informe dentro del área segura
   ['apple-touch-icon.png', 180, 0.9, false], // iOS aplica sus propias esquinas
 ]
 for (const [nombre, tam, escala, redondeado] of iconos) {

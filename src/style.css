@@ -21,6 +21,14 @@
 @layer base {
   body {
     @apply bg-brand-50 text-brand-950 antialiased;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none; /* sin rebote ni recarga al deslizar: se siente como app */
+  }
+  button,
+  [role='button'] {
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation; /* sin retardo ni zoom por doble toque */
   }
 }
 

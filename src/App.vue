@@ -22,8 +22,11 @@ import NotificacionesView from './views/NotificacionesView.vue'
 import PendientesView from './views/PendientesView.vue'
 import ClientesView from './views/ClientesView.vue'
 import ConfiguracionView from './views/ConfiguracionView.vue'
+import InstalarView from './views/InstalarView.vue'
+import QrInstalarView from './views/QrInstalarView.vue'
+import { useInstalacion } from './composables/useInstalacion'
 import BarraConexion from './components/BarraConexion.vue'
-import { ArrowLeft, Bell, Building2, CalendarDays, FileText, Menu, Plus, Settings, ShieldCheck, UserRound } from 'lucide-vue-next'
+import { ArrowLeft, Bell, Building2, CalendarDays, FileText, Menu, Plus, QrCode, Settings, ShieldCheck, Smartphone, UserRound } from 'lucide-vue-next'
 import MenuLateral from './components/MenuLateral.vue'
 import { estado as estadoRed } from './offline/estado'
 
@@ -34,6 +37,15 @@ const T = useTecnicos()
 const F = useFotos()
 const N = useNotificaciones()
 const CFG = useConfiguracion()
+const { instalada } = useInstalacion()
+// Quien llega escaneando el QR (?instalar=1) ve primero cómo instalar la app
+const verInstalacion = ref(new URLSearchParams(location.search).has('instalar') && !instalada.value)
+function seguirDeInstalacion() {
+  verInstalacion.value = false
+  const u = new URL(location.href)
+  u.searchParams.delete('instalar')
+  history.replaceState(null, '', u.pathname + u.search + u.hash)
+}
 CFG.cargar() // marca de la empresa: pública, se pide también antes de iniciar sesión
 
 // Vistas: agenda | visita-nueva | visita-detalle | visita-editar
@@ -66,8 +78,10 @@ const TITULOS = {
   pendientes: 'Cambios pendientes',
   clientes: 'Clientes',
   ajustes: 'Ajustes de la app',
+  instalar: 'Instalar la app',
+  qr: 'Código QR de instalación',
 }
-const esPrincipal = computed(() => ['agenda', 'informes', 'clientes', 'usuarios', 'ajustes'].includes(vista.value))
+const esPrincipal = computed(() => ['agenda', 'informes', 'clientes', 'usuarios', 'ajustes', 'instalar', 'qr'].includes(vista.value))
 const error = computed(() => V.error.value || I.error.value)
 const cargando = computed(() => V.cargando.value || I.cargando.value)
 
@@ -289,6 +303,7 @@ const arbol = computed(() => {
   const hoja = (id, texto, vistas, extra = {}) => ({ id, texto, vistas, activo: vistas.includes(v) && (extra.opcion ?? null) === op, ...extra })
   const grupo = (id, texto, icono, hijos, extra = {}) => {
     const lista = hijos.filter(Boolean)
+    if (!lista.length) return null // p. ej. un técnico con la app ya instalada
     if (lista.length === 1) return { ...lista[0], texto, icono, ...extra }
     return { id, texto, icono, hijos: lista, activo: lista.some((h) => h.activo), ...extra }
   }
@@ -321,6 +336,10 @@ const arbol = computed(() => {
           ),
         ),
       ]),
+    grupo('instalacion', 'Instalar la app', Smartphone, [
+      puedeAgendar.value && hoja('qr', 'Código QR para instalar', ['qr']),
+      !instalada.value && hoja('instalar', 'Instalar en este equipo', ['instalar']),
+    ], puedeAgendar.value ? {} : { icono: Smartphone }),
     grupo(
       'cuenta',
       'Mi cuenta',
@@ -369,7 +388,8 @@ function salirDelMenu() {
 </script>
 
 <template>
-  <LoginView v-if="!logueado" />
+  <InstalarView v-if="verInstalacion" completa @continuar="seguirDeInstalacion" />
+  <LoginView v-else-if="!logueado" />
   <ClaveView v-else-if="usuario.cambiarClave" obligatorio />
 
   <template v-else>
@@ -438,6 +458,8 @@ function salirDelMenu() {
       <PendientesView v-else-if="vista === 'pendientes'" />
       <ClientesView v-else-if="vista === 'clientes' && puedeAgendar" :solicitud="solicitudClientes" @agendar="agendarParaCliente" @abrir-visita="abrirVisita" />
       <ConfiguracionView v-else-if="vista === 'ajustes' && esSuper" :solicitud="solicitudAjustes" />
+      <InstalarView v-else-if="vista === 'instalar'" @continuar="ir('agenda')" />
+      <QrInstalarView v-else-if="vista === 'qr' && puedeAgendar" />
       <ClaveView v-else-if="vista === 'clave'" @listo="ir('agenda')" />
       <UsuariosView v-else-if="vista === 'usuarios' && esSuper" />
     </main>
