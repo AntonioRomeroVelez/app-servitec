@@ -47,11 +47,11 @@ function etiqueta(fecha) {
 
 <template>
   <div class="mb-3 flex items-center gap-2">
-    <div class="flex flex-1 gap-1.5 overflow-x-auto" role="tablist">
+    <div class="grid min-w-0 flex-1 grid-cols-2 gap-1.5 sm:grid-cols-4" role="tablist">
       <button
         v-for="f in filtros"
         :key="f.id"
-        class="min-h-10 shrink-0 rounded-full px-4 text-sm font-semibold"
+        class="min-h-10 min-w-0 truncate rounded-full px-3 text-sm font-semibold"
         :class="filtro === f.id ? 'bg-brand-600 text-white' : 'bg-white text-brand-700 border border-brand-200'"
         @click="filtro = f.id"
       >
