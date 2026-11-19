@@ -1,15 +1,16 @@
 <script setup>
 import { ref } from 'vue'
+import { useToast } from '../composables/useToast'
 import { useInstalacion } from '../composables/useInstalacion'
 import { CircleCheck, Copy, Download, EllipsisVertical, Share, SquarePlus, TriangleAlert } from 'lucide-vue-next'
 
 // Instrucciones de instalación según el dispositivo. Se usa en la pantalla del QR (antes del ingreso) y en el menú.
 const { plataforma, instalada, puedeInstalar, seguro, instalar } = useInstalacion()
-const resultado = ref('')
+const toast = useToast()
 const copiado = ref(false)
 
 async function instalarAhora() {
-  resultado.value = (await instalar()) === 'accepted' ? 'Instalando la app…' : 'Instalación cancelada. Puedes intentarlo de nuevo.'
+  ;(await instalar()) === 'accepted' ? toast.info('Instalando la app…') : toast.info('Instalación cancelada. Puedes intentarlo de nuevo.')
 }
 async function copiarEnlace() {
   try {
@@ -44,7 +45,6 @@ async function copiarEnlace() {
       <!-- Chrome, Edge, Samsung: instalación con un toque -->
       <template v-else-if="puedeInstalar">
         <button type="button" class="btn w-full" @click="instalarAhora"><Download :size="20" aria-hidden="true" /> Instalar la app</button>
-        <p v-if="resultado" class="text-center text-sm text-brand-700" role="status">{{ resultado }}</p>
       </template>
 
       <!-- iPhone / iPad -->

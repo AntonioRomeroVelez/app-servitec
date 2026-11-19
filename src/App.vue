@@ -26,6 +26,8 @@ import InstalarView from './views/InstalarView.vue'
 import QrInstalarView from './views/QrInstalarView.vue'
 import { useInstalacion } from './composables/useInstalacion'
 import BarraConexion from './components/BarraConexion.vue'
+import ToastContenedor from './components/ToastContenedor.vue'
+import { useToast } from './composables/useToast'
 import { ArrowLeft, Bell, Building2, CalendarDays, FileText, Menu, Plus, QrCode, Settings, ShieldCheck, Smartphone, UserRound } from 'lucide-vue-next'
 import MenuLateral from './components/MenuLateral.vue'
 import { estado as estadoRed } from './offline/estado'
@@ -83,6 +85,7 @@ const TITULOS = {
 }
 const esPrincipal = computed(() => ['agenda', 'informes', 'clientes', 'usuarios', 'ajustes', 'instalar', 'qr'].includes(vista.value))
 const error = computed(() => V.error.value || I.error.value)
+watch(error, (e) => e && vista.value !== 'usuarios' && toast.error(e))
 const cargando = computed(() => V.cargando.value || I.cargando.value)
 
 function ir(v, id = null) {
@@ -244,8 +247,7 @@ const recargar = () => Promise.allSettled([cargarVisitas(), I.recargar(), T.carg
 
 // Tras volver la conexión o enviar cambios en cola: recarga los datos y refresca la pantalla abierta
 const claveRefresco = ref(0) // cambiarla vuelve a montar el detalle de la visita (recarga sus fotos)
-const mensajeSync = ref('')
-let temporizadorMensaje = null
+const toast = useToast()
 
 async function refrescarTodo() {
   F.limpiar()
@@ -257,9 +259,7 @@ async function refrescarTodo() {
 
 if (offline) {
   offline.ganchos.alSincronizar = (n) => {
-    mensajeSync.value = n === 1 ? 'Se envió 1 cambio.' : `Se enviaron ${n} cambios.`
-    clearTimeout(temporizadorMensaje)
-    temporizadorMensaje = setTimeout(() => (mensajeSync.value = ''), 4000)
+    toast.exito(n === 1 ? 'Se envió 1 cambio.' : `Se enviaron ${n} cambios.`)
     refrescarTodo()
   }
 }
@@ -412,9 +412,8 @@ function salirDelMenu() {
     <MenuLateral :abierto="menuAbierto" :arbol="arbol" :abiertos="abiertos" :usuario="usuario" @cerrar="menuAbierto = false" @elegir="elegir" @alternar="alternarGrupo" @salir="salirDelMenu" />
 
     <BarraConexion @ver="ir('pendientes')" />
-    <p v-if="mensajeSync" class="print:hidden bg-emerald-100 px-4 py-1.5 text-center text-sm text-emerald-800" role="status">{{ mensajeSync }}</p>
     <p v-if="modoDemo" class="print:hidden bg-acento/90 px-4 py-1.5 text-xs text-acento-texto">Modo demo: datos solo en este dispositivo. Configura <code>VITE_SCRIPT_URL</code> para usar Google Sheets.</p>
-    <p v-if="error && vista !== 'usuarios'" class="print:hidden bg-red-100 px-4 py-2 text-sm text-red-800">{{ error }}</p>
+    <ToastContenedor />
 
     <main class="mx-auto max-w-3xl px-4 pt-3 pb-24 print:max-w-none print:p-0">
       <!-- Agenda -->

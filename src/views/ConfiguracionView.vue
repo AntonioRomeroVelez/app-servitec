@@ -1,6 +1,7 @@
 <script setup>
 import { reactive, ref, computed, watch, onBeforeUnmount } from 'vue'
 import { Building2, Palette, FileText, ListChecks, ImagePlus, Trash2, RotateCcw, Save, ArrowUp, ArrowDown, Plus, Check, ChevronDown, ChevronUp, CircleAlert } from 'lucide-vue-next'
+import { useToast } from '../composables/useToast'
 import { useConfiguracion } from '../composables/useConfiguracion'
 import { TEMAS_PREDEFINIDOS, contraste } from '../tema'
 import { procesarLogo } from '../imagen'
@@ -31,7 +32,11 @@ function cargarCopias() {
 }
 cargarCopias()
 
-const mostrar = (seccion, texto, error = false) => Object.assign(aviso, { seccion, texto, error })
+const toast = useToast()
+const mostrar = (seccion, texto, error = false) => {
+  Object.assign(aviso, { seccion, texto, error })
+  error ? toast.error(texto) : toast.exito(texto)
+}
 const alternar = (s) => {
   abierta.value = abierta.value === s ? '' : s
   mostrar('', '')
@@ -144,9 +149,6 @@ const abiertoTipo = ref(null)
           <button class="btn flex-none" :disabled="guardando === 'empresa'"><Save :size="18" aria-hidden="true" />Guardar</button>
           <button type="button" class="btn-borde flex-none" @click="restablecer('empresa', 'Datos de la empresa')"><RotateCcw :size="18" aria-hidden="true" />Valores de fábrica</button>
         </div>
-        <p v-if="aviso.seccion === 'empresa'" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm" :class="aviso.error ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'" role="status">
-          <CircleAlert v-if="aviso.error" :size="16" aria-hidden="true" /><Check v-else :size="16" aria-hidden="true" />{{ aviso.texto }}
-        </p>
       </form>
     </section>
 
@@ -183,9 +185,6 @@ const abiertoTipo = ref(null)
             <button type="button" class="btn-borde flex-none" @click="logoNuevo = ''">Cancelar</button>
           </div>
           <p class="text-xs text-brand-700/80">PNG, JPG, WebP o SVG. Se reduce solo para que pese poco. Aparece en el ingreso y en el PDF de los informes; un logo con fondo transparente se ve mejor.</p>
-          <p v-if="aviso.seccion === 'logo'" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm" :class="aviso.error ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'" role="status">
-            <CircleAlert v-if="aviso.error" :size="16" aria-hidden="true" /><Check v-else :size="16" aria-hidden="true" />{{ aviso.texto }}
-          </p>
         </div>
 
         <!-- Colores -->
@@ -242,9 +241,6 @@ const abiertoTipo = ref(null)
             <button class="btn flex-none" :disabled="guardando === 'tema' || !coloresValidos || !primarioLegible"><Save :size="18" aria-hidden="true" />Guardar colores</button>
             <button type="button" class="btn-borde flex-none" @click="restablecer('tema', 'Colores')"><RotateCcw :size="18" aria-hidden="true" />Valores de fábrica</button>
           </div>
-          <p v-if="aviso.seccion === 'tema'" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm" :class="aviso.error ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'" role="status">
-            <CircleAlert v-if="aviso.error" :size="16" aria-hidden="true" /><Check v-else :size="16" aria-hidden="true" />{{ aviso.texto }}
-          </p>
         </form>
       </div>
     </section>
@@ -273,9 +269,6 @@ const abiertoTipo = ref(null)
           <button class="btn flex-none" :disabled="guardando === 'informes'"><Save :size="18" aria-hidden="true" />Guardar</button>
           <button type="button" class="btn-borde flex-none" @click="restablecer('informes', 'Informes')"><RotateCcw :size="18" aria-hidden="true" />Valores de fábrica</button>
         </div>
-        <p v-if="aviso.seccion === 'informes'" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm" :class="aviso.error ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'" role="status">
-          <CircleAlert v-if="aviso.error" :size="16" aria-hidden="true" /><Check v-else :size="16" aria-hidden="true" />{{ aviso.texto }}
-        </p>
       </form>
     </section>
 
@@ -315,9 +308,6 @@ const abiertoTipo = ref(null)
           <button class="btn flex-none" :disabled="guardando === 'tipos'"><Save :size="18" aria-hidden="true" />Guardar</button>
           <button type="button" class="btn-borde flex-none" @click="restablecer('tipos', 'Tipos de visita y checklists')"><RotateCcw :size="18" aria-hidden="true" />Valores de fábrica</button>
         </div>
-        <p v-if="aviso.seccion === 'tipos'" class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm" :class="aviso.error ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'" role="status">
-          <CircleAlert v-if="aviso.error" :size="16" aria-hidden="true" /><Check v-else :size="16" aria-hidden="true" />{{ aviso.texto }}
-        </p>
       </form>
     </section>
   </div>
