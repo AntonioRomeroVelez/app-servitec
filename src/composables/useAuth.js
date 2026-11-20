@@ -39,6 +39,11 @@ export function useAuth() {
     guardar(await call('login', { usuario: user.trim(), clave }))
   }
 
+  // Alta de una empresa nueva (SaaS): crea la cuenta, la empresa y su superadmin, y deja la sesión abierta
+  async function registrar(datos) {
+    guardar(await call('registrar', datos))
+  }
+
   // Cambio de clave propio: el servidor devuelve un token nuevo (las demás sesiones se cierran)
   async function cambiarMiClave(actual, nueva) {
     guardar(await call('cambiar_clave', { actual, nueva }))
@@ -50,5 +55,5 @@ export function useAuth() {
     cerrar()
   }
 
-  return { usuario: readonly(usuario), esSuper, puedeAgendar, logueado: computed(() => !!sesion.value), login, cambiarMiClave, logout }
+  return { usuario: readonly(usuario), esSuper, puedeAgendar, logueado: computed(() => !!sesion.value), login, registrar, cambiarMiClave, logout }
 }

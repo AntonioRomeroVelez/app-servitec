@@ -1,13 +1,18 @@
 // Capa de transporte: Google Apps Script (producción) o localStorage (modo demo, sin VITE_SCRIPT_URL).
 import { validarClave, normalizar } from './utils'
-import { CONFIG_DEFECTO, combinar } from './configuracion'
-import { contraste } from './tema'
+import { combinar } from './configuracion'
+import { valorSeccion, SECCIONES } from './validarConfig'
 import { crearCapaOffline } from './offline/capa.js'
 import { iniciarConexion } from './offline/conexion.js'
 import { estado } from './offline/estado.js'
+import { crearTransporte } from './supabase/transporte.js'
 
+// Prioridad: Supabase (SaaS) > Google Apps Script (heredado) > modo demo (localStorage)
 const SCRIPT_URL = import.meta.env.VITE_SCRIPT_URL
-export const modoDemo = !SCRIPT_URL
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
+export const modoSupabase = !!SUPABASE_URL
+export const modoDemo = !SCRIPT_URL && !modoSupabase
+const supabase = modoSupabase ? crearTransporte({ url: SUPABASE_URL, anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY }) : null
 export const SESION_KEY = 'ferisel-sesion'
 
 let onAuthError = () => {}
@@ -33,6 +38,7 @@ function error(msg, code = '') {
 // Una petición al backend. Un fallo de conexión (sin red, tiempo agotado, respuesta ilegible) se señala con code 'RED';
 // un error que responde el servidor conserva el code del servidor (AUTH, FORBIDDEN, ...).
 async function llamarRed(action, payload) {
+  if (supabase) return supabase.call(action, payload)
   const control = new AbortController()
   const limite = setTimeout(() => control.abort(), action === 'fotos_upload' ? 90000 : 25000)
   let res
@@ -229,37 +235,16 @@ function configDemo() {
 }
 
 function guardarConfigDemo(seccion, p) {
-  if (!['empresa', 'tema', 'logo', 'informes', 'tipos'].includes(seccion)) throw error('Sección inválida')
   const actual = leer(LS_CFG, {})
-  const d = p.data || {}
   if (p.restablecer) {
+    if (!SECCIONES.includes(seccion)) throw error('Sección inválida')
     delete actual[seccion]
-  } else if (seccion === 'empresa') {
-    if (!String(d.nombre || '').trim()) throw error('Escribe el nombre de la empresa')
-    actual.empresa = { ...CONFIG_DEFECTO.empresa, ...d, nombre: String(d.nombre).trim() }
-  } else if (seccion === 'tema') {
-    const t = { primario: String(d.primario || '').trim().toLowerCase(), acento: String(d.acento || '').trim().toLowerCase() }
-    if (!/^#[0-9a-f]{6}$/.test(t.primario) || !/^#[0-9a-f]{6}$/.test(t.acento)) throw error('Los colores deben tener el formato #RRGGBB')
-    if (contraste(t.primario, '#ffffff') < 4.5) throw error('El color principal es demasiado claro: el texto blanco no se leería. Elige uno más oscuro.')
-    actual.tema = t
-  } else if (seccion === 'logo') {
-    if (d.logo && !/^data:image\/(png|jpeg|webp);base64,/.test(d.logo)) throw error('El logo debe ser una imagen PNG, JPG o WebP')
-    actual.logo = d.logo || ''
-  } else if (seccion === 'informes') {
-    const prefijo = String(d.prefijo || '').trim().toUpperCase()
-    if (!/^[A-Z0-9]{2,6}$/.test(prefijo)) throw error('El prefijo del número debe tener de 2 a 6 letras o números (por ejemplo INF)')
-    actual.informes = { prefijo, pdfChecklist: !!d.pdfChecklist, pdfFotos: !!d.pdfFotos, pdfFirma: !!d.pdfFirma, pdfObservaciones: !!d.pdfObservaciones }
   } else {
-    const tipos = Array.isArray(d.tipos) ? d.tipos : []
-    if (tipos.length < 1 || tipos.length > 12) throw error('Debe haber entre 1 y 12 tipos de visita')
-    const vistos = new Set()
-    actual.tipos = tipos.map((t) => {
-      const nombre = String(t.nombre || '').trim()
-      if (!nombre) throw error('Cada tipo de visita necesita un nombre')
-      if (vistos.has(normalizar(nombre))) throw error(`Tipo de visita repetido: ${nombre}`)
-      vistos.add(normalizar(nombre))
-      return { nombre, checklist: (t.checklist || []).map((x) => String(x).trim()).filter(Boolean) }
-    })
+    try {
+      actual[seccion] = valorSeccion(seccion, p.data)
+    } catch (e) {
+      throw error(e.message)
+    }
   }
   escribir(LS_CFG, actual)
   return configDemo()

@@ -11,9 +11,10 @@
     "servidor:local": "node apps-script/test/servidor-local.js",
     "supabase:local": "node supabase/local/iniciar.mjs",
     "supabase:detener": "docker compose -f supabase/local/docker-compose.yml --env-file supabase/local/.env down",
-    "supabase:probar": "node supabase/local/probar.mjs"
+    "supabase:probar": "node supabase/local/probar.mjs && node --import ./supabase/local/registrar.mjs supabase/local/probar-transporte.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.2",
     "lucide-vue-next": "^1.0.0",
     "qrcode": "^1.5.4",
     "vue": "^3.5.13"

@@ -4,3 +4,4 @@ supabase/local/.env
 dist
 dist-local
 node_modules
+dist-supabase

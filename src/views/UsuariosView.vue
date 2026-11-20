@@ -5,6 +5,7 @@ import { useUsuarios } from '../composables/useUsuarios'
 import { useAuth, ROLES } from '../composables/useAuth'
 import { validarClave } from '../utils'
 import CampoClave from '../components/CampoClave.vue'
+import { modoSupabase } from '../api'
 
 const { usuarios, cargando, error, cargar, crear, actualizar } = useUsuarios()
 const { usuario: yo } = useAuth()
@@ -90,8 +91,8 @@ onMounted(() => cargar().catch(() => {}))
     <label class="etiqueta">Nombre
       <input v-model.trim="nuevo.nombre" class="campo" required />
     </label>
-    <label class="etiqueta">Correo para avisos (opcional)
-      <input v-model.trim="nuevo.correo" type="email" class="campo" autocomplete="off" autocapitalize="none" />
+    <label class="etiqueta">{{ modoSupabase ? 'Correo (lo usará para iniciar sesión)' : 'Correo para avisos (opcional)' }}
+      <input v-model.trim="nuevo.correo" type="email" class="campo" autocomplete="off" autocapitalize="none" :required="modoSupabase" />
     </label>
     <label class="etiqueta">Rol
       <select v-model="nuevo.rol" class="campo">
