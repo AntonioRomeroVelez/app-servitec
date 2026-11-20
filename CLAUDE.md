@@ -67,6 +67,15 @@ node scripts/generar-iconos.mjs                  # regenera los iconos de public
 - Iconos generados por `scripts/generar-iconos.mjs` (portapapeles con visto amarillo, sin dependencias).
 - Sin barras del navegador solo cuando está instalada; instalar exige HTTPS (salvo localhost). Sección del QR para admin y superadmin: menú Instalar la app > Código QR para instalar.
 
+## Migración a SaaS (en curso)
+
+Decisión: datos en Supabase (Postgres + PostgREST), una sola base con `empresa_id` y RLS; fotos siguen en Google Drive (carpeta por empresa > subcarpeta por usuario > subcarpeta por mes AAAA-MM; la tabla `drive_carpetas` guarda los ids de carpeta y solo la escribe el servidor; en la base solo `drive_id`, nombre y miniatura). Autenticación con Supabase Auth. Se hace por fases; el modo demo y la capa sin conexión se conservan.
+
+- Fase 1 (hecha): `supabase/migrations/0001_esquema.sql` (tablas, triggers de sellado/numeración/bitácora/transiciones del técnico, RLS por rol, `registrar_empresa`). Prueba: `supabase/pruebas/preparar.sql` + `aislamiento.sql` en un Postgres de Docker (17 comprobaciones de aislamiento entre empresas y roles). El backend de Apps Script sigue siendo el activo hasta terminar las fases.
+- Fase 2 (pendiente): `api.js` hacia PostgREST (`@supabase/supabase-js`), login con Supabase Auth, adaptar composables.
+- Fase 3 (pendiente): registro de empresas, planes, alta de usuarios por función de servidor (Edge Function), subida de fotos a Drive por una función de servidor.
+- Fase 4 (pendiente): migrar los datos de Sheets y retirar `Code.gs`.
+
 ## Pruebas
 
 `apps-script/test/harness.js` simula Apps Script (SpreadsheetApp, CacheService, LockService, PropertiesService, MailApp, DriveApp, etc.) y ejecuta el `Code.gs` real. Suites: seguridad, flujo, rendimiento (20 000 informes: ~2,7 MB de lectura frente a ~226 MB antes de optimizar), notificaciones, offline, clientes, bitácora, configuración y pwa (detección de plataforma y lectura real de los QR con `jsqr`). `servidor-local.js` expone el mismo código por HTTP para probar el frontend completo.
