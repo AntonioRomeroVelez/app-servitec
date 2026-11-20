@@ -170,6 +170,24 @@ ok(!(await A.cliente.rpc('restablecer_clave', { p_id: u1.id })).error, 'restable
 const R2 = nuevo()
 ok((await R2.call('login', { usuario: u1.usuario, clave: u1.cedula })).usuario.cambiarClave === true, 'la cédula vuelve a ser la clave temporal')
 
+// --- el superadmin de cada empresa restablece la clave de sus usuarios (y de nadie más)
+const vic = await crearUsuario(A, 'Victima Reset Prueba', 'tecnico', 60)
+const V1 = nuevo()
+await V1.call('login', { usuario: vic.usuario, clave: cedulaDe(60) })
+await V1.call('cambiar_clave', { actual: cedulaDe(60), nueva: 'ClaveVictima12345' })
+await V1.call('dashboard_resumen') // tiene la sesión abierta y funcionando
+await rechaza(() => B.call('usuarios_update', { id: vic.id, data: { clave: cedulaDe(60), temporal: true } }), 'el superadmin de otra empresa no restablece claves ajenas', /No encontrado|permisos/)
+ok((await B.cliente.rpc('restablecer_clave', { p_id: vic.id })).error?.message?.includes('No encontrado'), 'ni siquiera por la API directa (la base lo impide)')
+await rechaza(() => AD.call('usuarios_update', { id: vic.id, data: { clave: cedulaDe(60), temporal: true } }), 'un administrador (no superadmin) no restablece claves', /permisos/)
+await rechaza(() => T.call('usuarios_update', { id: vic.id, data: { clave: cedulaDe(60), temporal: true } }), 'un técnico no restablece claves', /permisos/)
+await A.call('usuarios_update', { id: vic.id, data: { clave: cedulaDe(60), temporal: true } })
+await rechaza(() => V1.cliente.auth.refreshSession().then(({ error }) => { if (error) throw new Error(error.message) }), 'las sesiones abiertas del usuario quedan cerradas (no se pueden renovar)', /.+/)
+await rechaza(() => V1.call('login', { usuario: vic.usuario, clave: 'ClaveVictima12345' }), 'la clave anterior ya no sirve', /incorrectos/)
+const V2 = nuevo()
+ok((await V2.call('login', { usuario: vic.usuario, clave: cedulaDe(60) })).usuario.cambiarClave === true, 'entra con la clave restablecida y debe cambiarla')
+await rechaza(() => V2.call('dashboard_resumen'), 'mientras no la cambie no puede usar la app', /cambiar tu clave|CAMBIAR/)
+ok((await A.call('usuarios_update', { id: ea.sesion.usuario.id, data: { nombre: ea.sesion.usuario.nombre } })).usuario === ea.usuario, 'el superadmin sigue pudiendo editar datos de su propio perfil')
+
 // --- Dashboard: cifras por rol (el técnico solo cuenta lo suyo) y resumen de la plataforma
 const dA = await A.call('dashboard_resumen')
 const dT = await T.call('dashboard_resumen')
