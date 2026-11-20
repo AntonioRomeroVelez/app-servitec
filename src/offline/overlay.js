@@ -31,7 +31,8 @@ function coincide(recurso, it, params) {
   }
   if (params.desde && it.fecha < params.desde) return false
   if (params.hasta && it.fecha > params.hasta) return false
-  return true
+  const q = String(params.q || '').trim().toLowerCase()
+  return !q || [it.cliente, it.direccion, it.tipo].some((c) => String(c || '').toLowerCase().includes(q))
 }
 
 function ordenar(recurso, items, params) {

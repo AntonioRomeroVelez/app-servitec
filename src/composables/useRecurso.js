@@ -8,7 +8,7 @@ import { call } from '../api'
  * Los listados son paginados y livianos: cada item trae solo los campos ligeros. `obtener(id)` trae el registro
  * completo (con firma, checklist, etc.) y lo marca con `_completo` para que las pantallas de detalle sepan que ya está.
  */
-export function crearRecurso(nombre, ordenar) {
+export function crearRecurso(nombre, ordenar, { limite = 0 } = {}) {
   const items = ref([])
   const cargando = ref(false)
   const error = ref('')
@@ -43,6 +43,7 @@ export function crearRecurso(nombre, ordenar) {
   // Primera página (o ventana) con filtros: reemplaza lo cargado
   const cargar = (params = {}) =>
     run(async () => {
+      params = limite && !params.limit ? { ...params, limit: limite } : params // tamaño de página por defecto
       parametros.value = params
       const r = await call(`${nombre}_list`, params)
       items.value = [...r.items].sort(ordenar)
@@ -52,6 +53,9 @@ export function crearRecurso(nombre, ordenar) {
     })
 
   const recargar = () => cargar(parametros.value)
+
+  // Salta a otra página (offset = posición del primer elemento) con los mismos filtros; reemplaza lo mostrado
+  const irAPagina = (offset) => cargar({ ...parametros.value, offset })
 
   // Siguiente página con los mismos filtros
   const masPaginas = () =>
@@ -122,6 +126,8 @@ export function crearRecurso(nombre, ordenar) {
     cargar,
     recargar,
     masPaginas,
+    irAPagina,
+    limite,
     agregar,
     obtener,
     crear,

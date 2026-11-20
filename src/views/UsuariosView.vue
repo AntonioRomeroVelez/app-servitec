@@ -1,10 +1,14 @@
 <script setup>
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, computed, watch, onMounted } from 'vue'
 import { Plus, X, KeyRound, Mail } from 'lucide-vue-next'
 import { useUsuarios } from '../composables/useUsuarios'
 import { useAuth, ROLES } from '../composables/useAuth'
 import { validarClave } from '../utils'
 import CampoClave from '../components/CampoClave.vue'
+import BarraFiltros from '../components/BarraFiltros.vue'
+import Paginador from '../components/Paginador.vue'
+import { usePaginaLocal } from '../composables/usePaginaLocal'
+import { normalizar } from '../utils'
 import { modoSupabase } from '../api'
 
 const { usuarios, cargando, error, cargar, crear, actualizar } = useUsuarios()
@@ -69,18 +73,46 @@ async function guardarCorreo(u) {
   }
 }
 
+// Búsqueda, filtros (rol y estado) y páginas en el dispositivo: la lista llega completa
+const q = ref('')
+const rol = ref('')
+const estado = ref('')
+const filtrados = computed(() => {
+  const t = normalizar(q.value)
+  return usuarios.value.filter(
+    (u) =>
+      (!rol.value || u.rol === rol.value) &&
+      (!estado.value || (estado.value === 'activos') === u.activo) &&
+      (!t || [u.nombre, u.usuario, u.correo].some((c) => normalizar(c).includes(t))),
+  )
+})
+const pag = usePaginaLocal(filtrados, 10)
+watch([q, rol, estado], pag.volverAlInicio)
+
 onMounted(() => cargar().catch(() => {}))
 </script>
 
 <template>
-  <div class="mb-3 flex items-center justify-between">
-    <p class="text-sm text-brand-700">{{ usuarios.length }} usuarios</p>
-    <button class="btn-acento min-h-11 flex-none" @click="mostrarForm = !mostrarForm">
-      <X v-if="mostrarForm" :size="18" aria-hidden="true" />
-      <Plus v-else :size="18" aria-hidden="true" />
-      {{ mostrarForm ? 'Cerrar' : 'Nuevo usuario' }}
-    </button>
-  </div>
+  <BarraFiltros v-model="q" placeholder="Buscar nombre, usuario o correo" :activos="(rol ? 1 : 0) + (estado ? 1 : 0)">
+    <template #filtros>
+      <select v-model="rol" class="campo !min-h-10 !py-1.5 text-sm" aria-label="Filtrar por rol">
+        <option value="">Todos los roles</option>
+        <option v-for="r in ROLES" :key="r" :value="r">{{ r }}</option>
+      </select>
+      <select v-model="estado" class="campo !min-h-10 !py-1.5 text-sm" aria-label="Filtrar por estado">
+        <option value="">Activos e inactivos</option>
+        <option value="activos">Solo activos</option>
+        <option value="inactivos">Solo inactivos</option>
+      </select>
+    </template>
+    <template #acciones>
+      <button class="btn-acento !min-h-10 !px-3 flex-none" :aria-label="mostrarForm ? 'Cerrar' : 'Nuevo usuario'" @click="mostrarForm = !mostrarForm">
+        <X v-if="mostrarForm" :size="18" aria-hidden="true" />
+        <Plus v-else :size="18" aria-hidden="true" />
+        <span class="sr-only sm:not-sr-only">{{ mostrarForm ? 'Cerrar' : 'Nuevo' }}</span>
+      </button>
+    </template>
+  </BarraFiltros>
 
   <p v-if="error || aviso" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso || error }}</p>
 
@@ -107,7 +139,7 @@ onMounted(() => cargar().catch(() => {}))
   </form>
 
   <ul class="grid gap-2.5">
-    <li v-for="u in usuarios" :key="u.id" class="tarjeta grid gap-2" :class="{ 'opacity-60': !u.activo }">
+    <li v-for="u in pag.visibles.value" :key="u.id" class="tarjeta grid gap-2" :class="{ 'opacity-60': !u.activo }">
       <div class="flex items-start justify-between gap-2">
         <div>
           <strong class="text-brand-900">{{ u.nombre }}</strong>
@@ -152,4 +184,7 @@ onMounted(() => cargar().catch(() => {}))
       </form>
     </li>
   </ul>
+
+  <p v-if="!filtrados.length" class="py-8 text-center text-brand-700/70">No hay usuarios que coincidan.</p>
+  <Paginador :total="pag.total.value" :offset="pag.offset.value" :limite="pag.limite" @ir="pag.ir" />
 </template>

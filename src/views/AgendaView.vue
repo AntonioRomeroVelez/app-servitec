@@ -1,34 +1,38 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { hoy, manana, fechaLarga } from '../utils'
+import { PERIODOS, paramsAgenda, periodoDe } from '../filtrosAgenda'
 import EstadoBadge from '../components/EstadoBadge.vue'
-import { CloudUpload, RefreshCw } from 'lucide-vue-next'
+import BarraFiltros from '../components/BarraFiltros.vue'
+import Paginador from '../components/Paginador.vue'
+import { CloudUpload } from 'lucide-vue-next'
 
+// El período, la búsqueda y las páginas se resuelven en el servidor; aquí solo se muestran las visitas de la página actual.
 const props = defineProps({
   visitas: Array,
   cargando: Boolean,
   mostrarAutor: Boolean,
-  hayAnteriores: Boolean, // hay visitas más antiguas que la ventana cargada
-  cargandoMas: Boolean,
+  total: { type: Number, default: 0 },
+  offset: { type: Number, default: 0 },
+  limite: { type: Number, default: 15 },
+  filtros: { type: Object, default: () => ({}) }, // filtros vigentes (para no perderlos al volver a esta pantalla)
   nombreDe: { type: Function, default: (u) => u },
 })
-defineEmits(['abrir', 'refrescar', 'anteriores'])
+const emit = defineEmits(['abrir', 'refrescar', 'buscar', 'pagina'])
 
-const filtros = [
-  { id: 'proximas', texto: 'Próximas' },
-  { id: 'hoy', texto: 'Hoy' },
-  { id: 'pasadas', texto: 'Pasadas' },
-  { id: 'todas', texto: 'Todas' },
-]
-const filtro = ref('proximas')
+const periodo = ref(periodoDe(props.filtros))
+const q = ref(props.filtros.q ?? '')
 
-// Agrupadas por día; las pasadas se muestran de la más reciente a la más antigua
+let temporizador
+watch([periodo, q], () => {
+  clearTimeout(temporizador) // espera a que termine de escribir
+  temporizador = setTimeout(() => emit('buscar', paramsAgenda(periodo.value, q.value.trim())), 300)
+})
+onBeforeUnmount(() => clearTimeout(temporizador))
+
+// Agrupadas por día; las pasadas y "todas" se muestran de la más reciente a la más antigua
 const grupos = computed(() => {
-  const h = hoy()
-  let lista = props.visitas.filter(
-    (v) => ({ hoy: v.fecha === h, proximas: v.fecha >= h, pasadas: v.fecha < h, todas: true })[filtro.value],
-  )
-  if (filtro.value === 'pasadas') lista = [...lista].reverse()
+  const lista = periodo.value === 'pasadas' || periodo.value === 'todas' ? [...props.visitas].reverse() : props.visitas
   const map = new Map()
   for (const v of lista) {
     if (!map.has(v.fecha)) map.set(v.fecha, [])
@@ -46,22 +50,13 @@ function etiqueta(fecha) {
 </script>
 
 <template>
-  <div class="mb-3 flex items-center gap-2">
-    <div class="grid min-w-0 flex-1 grid-cols-2 gap-1.5 sm:grid-cols-4" role="tablist">
-      <button
-        v-for="f in filtros"
-        :key="f.id"
-        class="min-h-10 min-w-0 truncate rounded-full px-3 text-sm font-semibold"
-        :class="filtro === f.id ? 'bg-brand-600 text-white' : 'bg-white text-brand-700 border border-brand-200'"
-        @click="filtro = f.id"
-      >
-        {{ f.texto }}
-      </button>
-    </div>
-    <button class="min-h-10 min-w-10 rounded-xl border border-brand-200 bg-white flex items-center justify-center text-brand-700" aria-label="Recargar" @click="$emit('refrescar')">
-      <RefreshCw :size="20" aria-hidden="true" />
-    </button>
-  </div>
+  <BarraFiltros v-model="q" placeholder="Buscar cliente, dirección o tipo" recargar @refrescar="$emit('refrescar')">
+    <template #rapido>
+      <select v-model="periodo" class="campo !min-h-10 !w-auto !py-1.5 text-sm" aria-label="Período">
+        <option v-for="p in PERIODOS" :key="p.id" :value="p.id">{{ p.texto }}</option>
+      </select>
+    </template>
+  </BarraFiltros>
 
   <p v-if="cargando && !visitas.length" class="py-10 text-center text-brand-700">Cargando…</p>
   <p v-else-if="!grupos.length" class="py-10 text-center text-brand-700/70">No hay visitas agendadas.</p>
@@ -90,7 +85,5 @@ function etiqueta(fecha) {
     </ul>
   </section>
 
-  <div v-if="hayAnteriores && (filtro === 'pasadas' || filtro === 'todas')" class="mt-2 grid justify-items-center">
-    <button class="btn-borde flex-none" :disabled="cargandoMas" @click="$emit('anteriores')">{{ cargandoMas ? 'Cargando…' : 'Cargar visitas anteriores' }}</button>
-  </div>
+  <Paginador :total="total" :offset="offset" :limite="limite" :cargando="cargando" @ir="$emit('pagina', $event)" />
 </template>

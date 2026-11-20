@@ -345,6 +345,8 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
       if (desde) q = q.gte('fecha', desde)
       if (hasta) q = q.lte('fecha', hasta)
       if (p.clienteId) q = q.eq('cliente_id', p.clienteId)
+      const t = limpiarBusqueda(p.q)
+      if (t) q = q.or(`cliente.ilike.*${t}*,direccion.ilike.*${t}*,tipo.ilike.*${t}*`)
       const { data, error, count } = await q.order('fecha', { ascending: asc }).order('hora', { ascending: asc }).range(offset, offset + limite - 1)
       if (error) throw aError(error)
       let antes = 0

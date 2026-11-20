@@ -4,4 +4,4 @@ import { crearRecurso } from './useRecurso'
 export const ESTADOS = ['Borrador', 'En revisión', 'Finalizado']
 
 // Más recientes primero
-export const useInformes = crearRecurso('informes', (a, b) => String(b.fecha).localeCompare(String(a.fecha)))
+export const useInformes = crearRecurso('informes', (a, b) => String(b.fecha).localeCompare(String(a.fecha)), { limite: 15 })

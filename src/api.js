@@ -191,7 +191,12 @@ function listarDemo(nombre, p, lista, ver) {
     const desde = esFecha.test(p.desde) ? p.desde : ''
     const hasta = esFecha.test(p.hasta) ? p.hasta : ''
     if (desde) antes = items.filter((v) => v.fecha < desde).length
-    items = items.filter((v) => (!desde || v.fecha >= desde) && (!hasta || v.fecha <= hasta) && (!p.clienteId || v.clienteId === p.clienteId))
+    const q = String(p.q || '').trim().toLowerCase().slice(0, 60)
+    items = items.filter(
+      (v) =>
+        (!desde || v.fecha >= desde) && (!hasta || v.fecha <= hasta) && (!p.clienteId || v.clienteId === p.clienteId) &&
+        (!q || [v.cliente, v.direccion, v.tipo].some((c) => String(c || '').toLowerCase().includes(q))),
+    )
     const signo = p.orden === 'desc' ? -1 : 1
     items.sort((a, b) => {
       const x = `${a.fecha} ${a.hora}`

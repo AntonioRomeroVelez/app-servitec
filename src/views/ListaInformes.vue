@@ -2,19 +2,22 @@
 import { ref, watch, onBeforeUnmount } from 'vue'
 import { ESTADOS } from '../composables/useInformes'
 import EstadoBadge from '../components/EstadoBadge.vue'
-import { CloudUpload, RefreshCw } from 'lucide-vue-next'
+import BarraFiltros from '../components/BarraFiltros.vue'
+import Paginador from '../components/Paginador.vue'
+import { CloudUpload } from 'lucide-vue-next'
 import { fechaCorta } from '../utils'
 
-// La búsqueda y el filtro se resuelven en el servidor y la lista llega paginada
+// La búsqueda, el filtro y las páginas se resuelven en el servidor
 const props = defineProps({
   informes: Array,
   cargando: Boolean,
   mostrarAutor: Boolean,
-  hayMas: Boolean,
   total: { type: Number, default: 0 },
+  offset: { type: Number, default: 0 },
+  limite: { type: Number, default: 15 },
   filtros: { type: Object, default: () => ({}) }, // filtros vigentes (para no perderlos al volver a esta pantalla)
 })
-const emit = defineEmits(['abrir', 'refrescar', 'buscar', 'mas'])
+const emit = defineEmits(['abrir', 'refrescar', 'buscar', 'pagina'])
 
 const q = ref(props.filtros.q ?? '')
 const estado = ref(props.filtros.estado ?? '')
@@ -28,16 +31,14 @@ onBeforeUnmount(() => clearTimeout(temporizador))
 </script>
 
 <template>
-  <div class="mb-3 grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1fr_11rem_auto]">
-    <input v-model="q" type="search" class="campo col-span-2 sm:col-span-1" placeholder="Buscar título, cliente, número o responsable" />
-    <select v-model="estado" class="campo" aria-label="Filtrar por estado">
-      <option value="">Todos</option>
-      <option v-for="e in ESTADOS" :key="e" :value="e">{{ e }}</option>
-    </select>
-    <button class="min-h-11 min-w-11 rounded-xl border border-brand-200 bg-white flex items-center justify-center text-brand-700" aria-label="Recargar" @click="$emit('refrescar')">
-      <RefreshCw :size="20" aria-hidden="true" />
-    </button>
-  </div>
+  <BarraFiltros v-model="q" placeholder="Buscar título, cliente, número o responsable" recargar @refrescar="$emit('refrescar')">
+    <template #rapido>
+      <select v-model="estado" class="campo !min-h-10 !w-auto !py-1.5 text-sm" aria-label="Filtrar por estado">
+        <option value="">Todos</option>
+        <option v-for="e in ESTADOS" :key="e" :value="e">{{ e }}</option>
+      </select>
+    </template>
+  </BarraFiltros>
 
   <p v-if="cargando && !informes.length" class="py-10 text-center text-brand-700">Cargando…</p>
   <p v-else-if="!informes.length" class="py-10 text-center text-brand-700/70">No hay informes.</p>
@@ -60,8 +61,5 @@ onBeforeUnmount(() => clearTimeout(temporizador))
     </li>
   </ul>
 
-  <div v-if="informes.length" class="mt-4 grid justify-items-center gap-2">
-    <p class="text-sm text-brand-700/70">Mostrando {{ informes.length }} de {{ Math.max(total, informes.length) }}</p>
-    <button v-if="hayMas" class="btn-borde flex-none" :disabled="cargando" @click="$emit('mas')">{{ cargando ? 'Cargando…' : 'Cargar más' }}</button>
-  </div>
+  <Paginador :total="total" :offset="offset" :limite="limite" :cargando="cargando" @ir="$emit('pagina', $event)" />
 </template>

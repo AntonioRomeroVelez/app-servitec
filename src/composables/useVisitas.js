@@ -12,6 +12,5 @@ export const TRANSICIONES_TECNICO = {
 export const ESTADOS_CON_INFORME = ['Aceptada', 'En curso', 'Realizada']
 
 // Cronológico: la más próxima primero
-export const useVisitas = crearRecurso('visitas', (a, b) =>
-  `${a.fecha} ${a.hora}`.localeCompare(`${b.fecha} ${b.hora}`),
-)
+// Cronológico dentro de la página (el orden de las páginas lo define el filtro de la agenda)
+export const useVisitas = crearRecurso('visitas', (a, b) => `${a.fecha} ${a.hora}`.localeCompare(`${b.fecha} ${b.hora}`), { limite: 15 })

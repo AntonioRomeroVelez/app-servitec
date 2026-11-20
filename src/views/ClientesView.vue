@@ -5,6 +5,8 @@ import { call } from '../api'
 import { useAuth } from '../composables/useAuth'
 import { useClientes } from '../composables/useClientes'
 import EstadoBadge from '../components/EstadoBadge.vue'
+import BarraFiltros from '../components/BarraFiltros.vue'
+import Paginador from '../components/Paginador.vue'
 import { fechaCorta } from '../utils'
 
 // Catálogo de clientes. Se llena solo al registrar visitas (el cliente nuevo se registra al guardar la visita);
@@ -66,14 +68,15 @@ async function alternarVisitas(c) {
 </script>
 
 <template>
-  <div class="mb-3 grid grid-cols-[1fr_auto] gap-2">
-    <input v-model="q" type="search" class="campo" placeholder="Buscar por nombre, teléfono o dirección" />
-    <button class="btn-acento min-h-11 flex-none" @click="editando === 'nuevo' ? (editando = null) : abrirForm(null)">
-      <X v-if="editando === 'nuevo'" :size="18" aria-hidden="true" />
-      <Plus v-else :size="18" aria-hidden="true" />
-      <span class="sr-only sm:not-sr-only">{{ editando === 'nuevo' ? 'Cerrar' : 'Nuevo' }}</span>
-    </button>
-  </div>
+  <BarraFiltros v-model="q" placeholder="Buscar por nombre, teléfono o dirección">
+    <template #acciones>
+      <button class="btn-acento !min-h-10 !px-3 flex-none" :aria-label="editando === 'nuevo' ? 'Cerrar' : 'Nuevo cliente'" @click="editando === 'nuevo' ? (editando = null) : abrirForm(null)">
+        <X v-if="editando === 'nuevo'" :size="18" aria-hidden="true" />
+        <Plus v-else :size="18" aria-hidden="true" />
+        <span class="sr-only sm:not-sr-only">{{ editando === 'nuevo' ? 'Cerrar' : 'Nuevo' }}</span>
+      </button>
+    </template>
+  </BarraFiltros>
 
   <p v-if="C.error.value" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ C.error.value }}</p>
 
@@ -153,8 +156,5 @@ async function alternarVisitas(c) {
     </li>
   </ul>
 
-  <div v-if="C.items.value.length" class="mt-4 grid justify-items-center gap-2">
-    <p class="text-sm text-brand-700/70">Mostrando {{ C.items.value.length }} de {{ Math.max(C.meta.value.total, C.items.value.length) }}</p>
-    <button v-if="C.hayMas.value" class="btn-borde flex-none" :disabled="C.cargando.value" @click="C.masPaginas().catch(() => {})">Cargar más</button>
-  </div>
+  <Paginador :total="C.meta.value.total" :offset="C.parametros.value.offset || 0" :limite="C.limite" :cargando="C.cargando.value" @ir="C.irAPagina($event).catch(() => {})" />
 </template>

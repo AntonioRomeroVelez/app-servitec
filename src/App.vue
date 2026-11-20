@@ -8,7 +8,7 @@ import { useFotos } from './composables/useFotos'
 import { useNotificaciones } from './composables/useNotificaciones'
 import { useConfiguracion } from './composables/useConfiguracion'
 import { modoDemo, call, offline, iniciarSincronizacion } from './api'
-import { haceDias, diaAnterior } from './utils'
+import { paramsAgenda } from './filtrosAgenda'
 import LoginView from './views/LoginView.vue'
 import AgendaView from './views/AgendaView.vue'
 import FormVisita from './views/FormVisita.vue'
@@ -218,31 +218,9 @@ async function borrarInforme() {
   }
 }
 
-// Agenda: se carga una ventana (últimos 14 días y todo lo futuro); las anteriores se piden con "Cargar visitas anteriores"
-const VENTANA_DIAS = 14
-const hayAnteriores = ref(false)
-const cargandoAnteriores = ref(false)
-let desdeVentana = ''
-let anterioresCargadas = 0
-
+// Agenda: filtros y páginas resueltos en el servidor (ver filtrosAgenda.js). Recargar conserva el filtro y la página.
 async function cargarVisitas() {
-  desdeVentana = haceDias(VENTANA_DIAS)
-  anterioresCargadas = 0
-  await V.cargar({ desde: desdeVentana })
-  hayAnteriores.value = V.meta.value.antes > 0
-}
-
-async function cargarAnteriores() {
-  cargandoAnteriores.value = true
-  try {
-    const r = await V.agregar({ hasta: diaAnterior(desdeVentana), orden: 'desc', limit: 30, offset: anterioresCargadas })
-    anterioresCargadas += r.items.length
-    hayAnteriores.value = r.hasMore
-  } catch {
-    /* el error se muestra en el banner */
-  } finally {
-    cargandoAnteriores.value = false
-  }
+  await V.cargar(V.parametros.value.limit ? V.parametros.value : paramsAgenda())
 }
 
 const recargar = () => Promise.allSettled([cargarVisitas(), I.recargar(), T.cargar()])
@@ -420,7 +398,7 @@ function salirDelMenu() {
 
     <main class="mx-auto max-w-3xl px-4 pt-3 pb-24 print:max-w-none print:p-0">
       <!-- Agenda -->
-      <AgendaView v-if="vista === 'agenda'" :visitas="V.items.value" :cargando="cargando" :mostrar-autor="esSuper" :nombre-de="T.nombreDe" :hay-anteriores="hayAnteriores" :cargando-mas="cargandoAnteriores" @abrir="(id) => abrirVisita(id)" @refrescar="recargar" @anteriores="cargarAnteriores" />
+      <AgendaView v-if="vista === 'agenda'" :visitas="V.items.value" :cargando="cargando" :mostrar-autor="esSuper" :nombre-de="T.nombreDe" :total="V.meta.value.total" :offset="V.parametros.value.offset || 0" :limite="V.limite" :filtros="V.parametros.value" @abrir="(id) => abrirVisita(id)" @refrescar="recargar" @buscar="(p) => V.cargar(p).catch(() => {})" @pagina="(o) => V.irAPagina(o).catch(() => {})" />
       <FormVisita v-else-if="vista === 'visita-nueva' && puedeAgendar" :tecnicos="T.tecnicos.value" :prefill="prefillVisita" :cargando="cargando" @guardar="guardarVisita" @cancelar="ir('agenda')" />
       <FormVisita v-else-if="vista === 'visita-editar' && visita && puedeAgendar" :tecnicos="T.tecnicos.value" :inicial="visita" :cargando="cargando" @guardar="guardarVisita" @cancelar="abrirVisita(seleccionadoId)" />
       <DetalleVisita
@@ -443,13 +421,14 @@ function salirDelMenu() {
         :informes="I.items.value"
         :cargando="I.cargando.value"
         :mostrar-autor="esSuper"
-        :hay-mas="I.hayMas.value"
         :total="I.meta.value.total"
+        :offset="I.parametros.value.offset || 0"
+        :limite="I.limite"
         :filtros="I.parametros.value"
         @abrir="(id) => abrirInforme('informe-detalle', id)"
         @refrescar="recargar"
         @buscar="(p) => I.cargar(p).catch(() => {})"
-        @mas="I.masPaginas().catch(() => {})"
+        @pagina="(o) => I.irAPagina(o).catch(() => {})"
       />
       <FormInforme v-else-if="vista === 'informe-nuevo'" :prefill="prefill" :cargando="cargando" @guardar="guardarInforme" @cancelar="volver" />
       <FormInforme v-else-if="vista === 'informe-editar' && informe?._completo" :inicial="informe" :cargando="cargando" @guardar="guardarInforme" @cancelar="abrirInforme('informe-detalle', seleccionadoId)" />

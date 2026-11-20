@@ -69,13 +69,20 @@ ok(v2.id === v.id, 'repetir la creación con el mismo id no duplica')
 await rechaza(() => A.call('visitas_create', { data: { fecha: manana, hora: '10:00', cliente: 'X', tipo: 'Inspección', responsable: 'nadie' } }), 'responsable inexistente', /Técnico inválido/)
 const lista = await A.call('visitas_list', { desde: manana, orden: 'asc' })
 ok(lista.items.length === 1 && lista.total === 1 && lista.antes === 0, 'visitas_list con filtros y total')
+ok((await A.call('visitas_list', { q: 'ferret' })).total === 1 && (await A.call('visitas_list', { q: 'zzzz' })).total === 0, 'visitas_list busca por cliente, dirección o tipo')
+for (const [i, nombre] of ['Panadería Luna', 'Taller Sur', 'Hotel Centro'].entries()) {
+  await A.call('visitas_create', { data: { fecha: `2026-12-0${i + 1}`, hora: '10:00', cliente: nombre, tipo: 'Mantenimiento', responsable: 'tec1' } })
+}
+const pag1 = await A.call('visitas_list', { orden: 'asc', limit: 2, offset: 0 })
+const pag2 = await A.call('visitas_list', { orden: 'asc', limit: 2, offset: 2 })
+ok(pag1.items.length === 2 && pag1.total === 4 && pag1.hasMore && pag2.items.length === 2 && !pag2.hasMore && pag1.items[0].id !== pag2.items[0].id, 'visitas_list pagina con limit y offset y devuelve el total')
 const cl = await A.call('clientes_list', {})
-ok(cl.total === 1 && cl.items[0].nombre === 'Ferretería Sol', 'el cliente quedó registrado al agendar')
-await rechaza(() => A.call('clientes_delete', { id: cl.items[0].id }), 'no se borra un cliente con visitas', /visitas registradas/)
+ok(cl.total === 4 && cl.items.some((c) => c.nombre === 'Ferretería Sol'), 'los clientes quedaron registrados al agendar')
+await rechaza(() => A.call('clientes_delete', { id: cl.items.find((c) => c.nombre === 'Ferretería Sol').id }), 'no se borra un cliente con visitas', /visitas registradas/)
 await rechaza(() => T.call('clientes_list', {}), 'el técnico no ve clientes', /permisos/)
 
 // --- técnico: solo lo suyo, y transiciones
-ok((await T.call('visitas_list', {})).items.length === 1, 'el técnico ve su visita')
+ok((await T.call('visitas_list', {})).items.length === 4, 'el técnico ve solo sus visitas')
 ok((await B.call('visitas_list', {})).items.length === 0, 'la empresa B no ve visitas de A')
 await rechaza(() => T.call('visitas_update', { id: v.id, data: { estado: 'Realizada' } }), 'transición inválida', /no permitido/)
 await rechaza(() => T.call('visitas_update', { id: v.id, data: { estado: 'Cancelada' } }), 'cancelar exige motivo', /motivo/)

@@ -1,10 +1,13 @@
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { Building2, Pencil, Plus, Power, X } from 'lucide-vue-next'
 import { call } from '../api'
 import { useToast } from '../composables/useToast'
-import { validarClave } from '../utils'
+import { validarClave, normalizar } from '../utils'
 import CampoClave from '../components/CampoClave.vue'
+import BarraFiltros from '../components/BarraFiltros.vue'
+import Paginador from '../components/Paginador.vue'
+import { usePaginaLocal } from '../composables/usePaginaLocal'
 
 // Empresas del SaaS. Solo las crea y edita el superadmin de la plataforma: pone el nombre, llena sus datos y crea
 // su administrador (superadmin de esa empresa), que luego personaliza marca e informes en Ajustes.
@@ -31,6 +34,22 @@ async function cargar() {
   }
 }
 onMounted(cargar)
+
+// Búsqueda y filtros (estado y plan) en el dispositivo; la lista llega completa y se muestra por páginas
+const q = ref('')
+const estado = ref('')
+const plan = ref('')
+const filtradas = computed(() => {
+  const t = normalizar(q.value)
+  return empresas.value.filter(
+    (e) =>
+      (!estado.value || (estado.value === 'activas') === e.activa) &&
+      (!plan.value || e.plan === plan.value) &&
+      (!t || [e.nombre, e.datos?.ruc, e.datos?.correo, e.datos?.telefono].some((c) => normalizar(c).includes(t))),
+  )
+})
+const pag = usePaginaLocal(filtradas, 10)
+watch([q, estado, plan], pag.volverAlInicio)
 
 function abrir(e) {
   Object.assign(form, vacia())
@@ -77,10 +96,26 @@ async function alternar(e) {
 </script>
 
 <template>
-  <div class="mb-3 flex items-center justify-between gap-2">
-    <p class="text-sm text-brand-700">Cada empresa tiene sus propios datos, usuarios y visitas.</p>
-    <button class="btn" @click="editando === 'nueva' ? cerrar() : abrir(null)"><Plus :size="18" aria-hidden="true" /> Nueva empresa</button>
-  </div>
+  <BarraFiltros v-model="q" placeholder="Buscar nombre, RUC o correo" :activos="(estado ? 1 : 0) + (plan ? 1 : 0)">
+    <template #filtros>
+      <select v-model="estado" class="campo !min-h-10 !py-1.5 text-sm" aria-label="Filtrar por estado">
+        <option value="">Activas y desactivadas</option>
+        <option value="activas">Solo activas</option>
+        <option value="desactivadas">Solo desactivadas</option>
+      </select>
+      <select v-model="plan" class="campo !min-h-10 !py-1.5 text-sm" aria-label="Filtrar por plan">
+        <option value="">Todos los planes</option>
+        <option v-for="p in PLANES" :key="p" :value="p">{{ p }}</option>
+      </select>
+    </template>
+    <template #acciones>
+      <button class="btn-acento !min-h-10 !px-3 flex-none" :aria-label="editando === 'nueva' ? 'Cerrar' : 'Nueva empresa'" @click="editando === 'nueva' ? cerrar() : abrir(null)">
+        <X v-if="editando === 'nueva'" :size="18" aria-hidden="true" />
+        <Plus v-else :size="18" aria-hidden="true" />
+        <span class="sr-only sm:not-sr-only">{{ editando === 'nueva' ? 'Cerrar' : 'Nueva' }}</span>
+      </button>
+    </template>
+  </BarraFiltros>
 
   <p v-if="error && !editando" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
@@ -142,9 +177,10 @@ async function alternar(e) {
 
   <p v-if="cargando && !empresas.length" class="py-10 text-center text-brand-700">Cargando…</p>
   <p v-else-if="!empresas.length" class="py-10 text-center text-brand-700/70">Todavía no hay empresas.</p>
+  <p v-else-if="!filtradas.length" class="py-10 text-center text-brand-700/70">No hay empresas que coincidan.</p>
 
   <ul class="grid gap-2.5">
-    <li v-for="e in empresas" :key="e.id" class="tarjeta flex items-start gap-3" :class="{ 'opacity-60': !e.activa }">
+    <li v-for="e in pag.visibles.value" :key="e.id" class="tarjeta flex items-start gap-3" :class="{ 'opacity-60': !e.activa }">
       <span class="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-700"><Building2 :size="20" aria-hidden="true" /></span>
       <span class="grid min-w-0 flex-1 gap-0.5">
         <strong class="truncate text-brand-900">{{ e.nombre }}</strong>
@@ -157,4 +193,6 @@ async function alternar(e) {
       </span>
     </li>
   </ul>
+
+  <Paginador :total="pag.total.value" :offset="pag.offset.value" :limite="pag.limite" @ir="pag.ir" />
 </template>
