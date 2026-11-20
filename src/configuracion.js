@@ -1,7 +1,7 @@
 // Valores por defecto de la configuración que el superadmin puede personalizar (empresa, colores, logo, informes, tipos de
 // visita con su checklist). Deben coincidir con CONFIG_DEFECTO de apps-script/Code.gs: una prueba lo comprueba.
 export const CONFIG_DEFECTO = {
-  empresa: { nombre: 'FERISEL', subtitulo: 'SECURITY SOLUTIONS', ruc: '', direccion: '', telefono: '', correo: '', web: '', pie: '' },
+  empresa: { nombre: 'ServiTec', subtitulo: '', ruc: '', direccion: '', telefono: '', correo: '', web: '', pie: '' },
   tema: { primario: '#1565d8', acento: '#f6c915' },
   logo: '',
   informes: { prefijo: 'INF', pdfChecklist: true, pdfFotos: true, pdfFirma: true, pdfObservaciones: true },

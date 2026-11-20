@@ -37,9 +37,9 @@ test('al asignar una visita el técnico recibe aviso en la app y por correo; qui
 
   assert.equal(env.correos.length, 1)
   assert.equal(env.correos[0].to, 'carlos@ferisel.test')
-  assert.equal(env.correos[0].subject, '[FERISEL] Nueva visita asignada')
+  assert.equal(env.correos[0].subject, '[ServiTec] Nueva visita asignada')
   assert.match(env.correos[0].htmlBody, /Banco del Sur/)
-  assert.match(env.correos[0].htmlBody, /FERISEL/)
+  assert.match(env.correos[0].htmlBody, /ServiTec/)
   assert.equal(env.correos[0].conLock, false) // se envió con el lock ya liberado
 })
 

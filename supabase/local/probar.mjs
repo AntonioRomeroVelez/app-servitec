@@ -1,4 +1,4 @@
-// Prueba de humo contra el Supabase local: registro, empresa, aislamiento entre empresas (HTTP real).
+// Prueba de humo contra el Supabase local: plataforma, empresas, aislamiento entre ellas (HTTP real).
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,16 +13,21 @@ const llamar = async (ruta, { token, ...op } = {}) => {
 let fallos = 0
 const ok = (c, m, extra) => (c ? console.log('OK:', m) : (fallos++, console.log('FALLO:', m, extra ?? '')))
 const sufijo = Date.now()
-const registrar = async (n) => {
-  const r = await llamar('/auth/v1/signup', { method: 'POST', body: JSON.stringify({ email: `${n}${sufijo}@prueba.com`, password: 'Clave12345x' }) })
-  return r.datos.access_token
-}
+import { crearSuperadmin } from './superadmin.mjs'
 
-const ta = await registrar('a'), tb = await registrar('b')
-ok(ta && tb, 'GoTrue registra usuarios y entrega token')
-const ea = await llamar('/rest/v1/rpc/registrar_empresa', { method: 'POST', token: ta, body: JSON.stringify({ p_empresa: 'Empresa A', p_nombre: 'Ana', p_usuario: 'ana' }) })
-const eb = await llamar('/rest/v1/rpc/registrar_empresa', { method: 'POST', token: tb, body: JSON.stringify({ p_empresa: 'Empresa B', p_nombre: 'Beto', p_usuario: 'beto' }) })
-ok(ea.ok && eb.ok, 'rpc/registrar_empresa crea las empresas', JSON.stringify(ea.datos))
+// Superadmin de plataforma (por SQL) y sesión por GoTrue; luego crea dos empresas con rpc/crear_empresa
+const ingresar = async (correo, clave) => (await llamar('/auth/v1/token?grant_type=password', { method: 'POST', body: JSON.stringify({ email: correo, password: clave }) })).datos.access_token
+crearSuperadmin({ usuario: 'plataforma', correo: `plat${sufijo}@prueba.com`, empresa: `Plataforma ${sufijo}`, clave: 'ClavePlataforma123', plataforma: true })
+const tp = await ingresar(`plat${sufijo}@prueba.com`, 'ClavePlataforma123')
+const empresa = (nombre, usuario) => llamar('/rest/v1/rpc/crear_empresa', { method: 'POST', token: tp, body: JSON.stringify({ p: { nombre, admin: { usuario, nombre: usuario, correo: `${usuario}${sufijo}@prueba.com`, clave: 'Temporal12345' } } }) })
+const ea = await empresa('Empresa A', 'ana')
+const eb = await empresa('Empresa B', 'beto')
+ok(ea.ok && eb.ok, 'la plataforma crea las empresas con rpc/crear_empresa', JSON.stringify(ea.datos))
+const ta = await ingresar(`ana${sufijo}@prueba.com`, 'Temporal12345')
+const tb = await ingresar(`beto${sufijo}@prueba.com`, 'Temporal12345')
+ok(ta && tb, 'los administradores entran con GoTrue')
+ok((await llamar('/rest/v1/rpc/crear_empresa', { method: 'POST', token: ta, body: JSON.stringify({ p: { nombre: 'X' } }) })).estado >= 400, 'un administrador no puede crear empresas')
+ok((await llamar('/rest/v1/rpc/registrar_empresa', { method: 'POST', token: ta, body: JSON.stringify({ p_empresa: 'X', p_nombre: 'x', p_usuario: 'xxx' }) })).estado >= 400, 'el registro abierto está cerrado')
 const yo = await llamar('/rest/v1/perfiles?select=usuario,rol', { token: ta })
 ok(yo.datos?.length === 1 && yo.datos[0].rol === 'superadmin', 'A ve solo su perfil de superadmin')
 const tecnico = await llamar('/rest/v1/rpc/crear_usuario', { method: 'POST', token: ta, body: JSON.stringify({ p_correo: `tecnico${sufijo}@prueba.com`, p_clave: 'Temporal12345', p_usuario: 'tecnico', p_nombre: 'Técnico', p_rol: 'tecnico' }) })

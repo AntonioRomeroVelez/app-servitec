@@ -72,7 +72,7 @@ export const textoSobre = (fondo, oscuro) => (contraste(fondo, oscuro) >= contra
 
 /** Combinaciones listas para elegir */
 export const TEMAS_PREDEFINIDOS = [
-  { nombre: 'Ferisel (azul y amarillo)', primario: '#1565d8', acento: '#f6c915' },
+  { nombre: 'Azul y amarillo', primario: '#1565d8', acento: '#f6c915' },
   { nombre: 'Verde y naranja', primario: '#157347', acento: '#f59e0b' },
   { nombre: 'Rojo y gris', primario: '#b3261e', acento: '#cbd5e1' },
   { nombre: 'Índigo y turquesa', primario: '#4338ca', acento: '#2dd4bf' },

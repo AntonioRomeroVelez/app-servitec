@@ -73,7 +73,7 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
     }
     return cache
   }
-  const publico = (p) => ({ id: p.id, usuario: p.usuario, nombre: p.nombre, rol: p.rol, activo: p.activo, cambiarClave: !!p.cambiar_clave, correo: p.correo || '' })
+  const publico = (p) => ({ id: p.id, usuario: p.usuario, nombre: p.nombre, rol: p.rol, activo: p.activo, cambiarClave: !!p.cambiar_clave, correo: p.correo || '', plataforma: !!p.plataforma })
   const nombreDe = (c, id) => (id ? c.porId.get(id)?.usuario || '' : '')
   const idDe = (c, usuario) => {
     if (!usuario) return null
@@ -98,7 +98,8 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
       const sesionActual = await sesion()
       const lista = ok(await sb.from('perfiles').select(COLS_PERFIL).eq('id', sesionActual.user.id))
       if (!lista.length) throw fallo('Tu cuenta no pertenece a ninguna empresa', 'AUTH')
-      yoCache = lista[0]
+      const esPlataforma = ok(await sb.from('plataforma_admins').select('user_id')).length > 0
+      yoCache = { ...lista[0], plataforma: esPlataforma }
       yoHasta = Date.now() + 30000
     }
     return yoCache
@@ -179,23 +180,6 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
       return { token: data.session.access_token, usuario: publico(perfil) }
     },
 
-    // Alta de una empresa nueva (SaaS): cuenta de acceso + empresa + superadmin
-    async registrar(p) {
-      const correo = String(p.correo || '').trim().toLowerCase()
-      const msg = validarClave(p.clave, p.usuario)
-      if (!String(p.empresa || '').trim()) throw fallo('Escribe el nombre de la empresa')
-      if (!String(p.nombre || '').trim()) throw fallo('Escribe tu nombre')
-      if (!/^[a-z0-9._-]{3,30}$/.test(p.usuario || '')) throw fallo('Usuario inválido: 3 a 30 caracteres (letras minúsculas, números, . _ -)')
-      if (!correo) throw fallo('Escribe tu correo')
-      if (msg) throw fallo(msg)
-      const { data, error } = await sb.auth.signUp({ email: correo, password: p.clave })
-      if (error) throw esRed(error) ? aError(error) : fallo(/already|registered/i.test(error.message) ? 'Ese correo ya está registrado' : error.message)
-      if (!data.session) throw fallo('Te enviamos un correo para confirmar tu cuenta. Confírmalo y luego inicia sesión.', 'CONFIRMAR')
-      ok(await sb.rpc('registrar_empresa', { p_empresa: p.empresa, p_nombre: p.nombre, p_usuario: p.usuario }))
-      olvidar()
-      return { token: data.session.access_token, usuario: publico(await yo()) }
-    },
-
     async logout() {
       await sb.auth.signOut()
       olvidar()
@@ -248,6 +232,25 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
     async tecnicos_list() {
       const c = await perfiles()
       return c.lista.filter((x) => x.rol === 'tecnico' && x.activo).map((x) => ({ usuario: x.usuario, nombre: x.nombre }))
+    },
+
+    // ---- empresas (solo el superadmin de la plataforma) ----
+    async empresas_list() {
+      return ok(await sb.rpc('listar_empresas')).map((e) => ({ id: e.id, nombre: e.nombre, plan: e.plan, activa: e.activa, creado: e.creado, usuarios: Number(e.usuarios), datos: e.datos }))
+    },
+    async empresas_create({ data: d }) {
+      const a = d.admin || {}
+      if (!String(d.nombre || '').trim()) throw fallo('Escribe el nombre de la empresa')
+      if (!/^[a-z0-9._-]{3,30}$/.test(a.usuario || '')) throw fallo('Usuario del administrador inválido: 3 a 30 caracteres (letras minúsculas, números, . _ -)')
+      if (!String(a.nombre || '').trim()) throw fallo('Escribe el nombre del administrador')
+      if (!String(a.correo || '').trim()) throw fallo('Escribe el correo del administrador: lo usará para iniciar sesión')
+      const msg = validarClave(a.clave, a.usuario)
+      if (msg) throw fallo(msg)
+      return ok(await sb.rpc('crear_empresa', { p: d }))
+    },
+    async empresas_update({ id, data: d }) {
+      ok(await sb.rpc('editar_empresa', { p_id: id, p: d }))
+      return true
     },
 
     // ---- usuarios (superadmin) ----
@@ -434,7 +437,7 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
     },
   }
 
-  const LIBRES = new Set(['login', 'registrar', 'logout', 'me', 'cambiar_clave', 'configuracion_get'])
+  const LIBRES = new Set(['login', 'logout', 'me', 'cambiar_clave', 'configuracion_get'])
 
   async function call(action, payload = {}) {
     const f = acciones[action]
@@ -443,6 +446,7 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
       if (!LIBRES.has(action)) {
         const perfil = await yo() // exige sesión
         if (perfil.cambiar_clave) throw fallo('Debes cambiar tu clave para continuar', 'CAMBIAR_CLAVE')
+        if (action.startsWith('empresas_') && !perfil.plataforma) throw fallo('Sin permisos', 'FORBIDDEN')
         if (action.startsWith('usuarios_') && perfil.rol !== 'superadmin') throw fallo('Sin permisos', 'FORBIDDEN')
         if (action.startsWith('clientes_') && perfil.rol === 'tecnico') throw fallo('Sin permisos', 'FORBIDDEN')
       }

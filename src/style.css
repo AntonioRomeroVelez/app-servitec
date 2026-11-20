@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 
-/* Paleta Ferisel Security Solutions: azul de marca, azul marino y amarillo de acento */
+/* Paleta por defecto: azul de marca, azul marino y amarillo de acento (cada empresa elige la suya en Ajustes) */
 @theme {
   --color-brand-50: #eff6ff;
   --color-brand-100: #dbeafe;

@@ -33,15 +33,11 @@ setClaveHandler(() => {
 export function useAuth() {
   const usuario = computed(() => sesion.value?.usuario ?? null)
   const esSuper = computed(() => usuario.value?.rol === 'superadmin')
+  const esPlataforma = computed(() => !!usuario.value?.plataforma)
   const puedeAgendar = computed(() => usuario.value?.rol === 'admin' || usuario.value?.rol === 'superadmin')
 
   async function login(user, clave) {
     guardar(await call('login', { usuario: user.trim(), clave }))
-  }
-
-  // Alta de una empresa nueva (SaaS): crea la cuenta, la empresa y su superadmin, y deja la sesión abierta
-  async function registrar(datos) {
-    guardar(await call('registrar', datos))
   }
 
   // Cambio de clave propio: el servidor devuelve un token nuevo (las demás sesiones se cierran)
@@ -55,5 +51,5 @@ export function useAuth() {
     cerrar()
   }
 
-  return { usuario: readonly(usuario), esSuper, puedeAgendar, logueado: computed(() => !!sesion.value), login, registrar, cambiarMiClave, logout }
+  return { usuario: readonly(usuario), esSuper, esPlataforma, puedeAgendar, logueado: computed(() => !!sesion.value), login, cambiarMiClave, logout }
 }

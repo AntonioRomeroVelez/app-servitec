@@ -17,6 +17,7 @@ import ListaInformes from './views/ListaInformes.vue'
 import FormInforme from './views/FormInforme.vue'
 import DetalleInforme from './views/DetalleInforme.vue'
 import UsuariosView from './views/UsuariosView.vue'
+import EmpresasView from './views/EmpresasView.vue'
 import ClaveView from './views/ClaveView.vue'
 import NotificacionesView from './views/NotificacionesView.vue'
 import PendientesView from './views/PendientesView.vue'
@@ -32,7 +33,7 @@ import { ArrowLeft, Bell, Building2, CalendarDays, FileText, Menu, Plus, QrCode,
 import MenuLateral from './components/MenuLateral.vue'
 import { estado as estadoRed } from './offline/estado'
 
-const { usuario, esSuper, puedeAgendar, logueado, logout } = useAuth()
+const { usuario, esSuper, esPlataforma, puedeAgendar, logueado, logout } = useAuth()
 const I = useInformes()
 const V = useVisitas()
 const T = useTecnicos()
@@ -75,6 +76,7 @@ const TITULOS = {
   'informe-detalle': 'Informe',
   'informe-editar': 'Editar informe',
   usuarios: 'Usuarios',
+  empresas: 'Empresas',
   clave: 'Cambiar clave',
   notificaciones: 'Notificaciones',
   pendientes: 'Cambios pendientes',
@@ -83,7 +85,7 @@ const TITULOS = {
   instalar: 'Instalar la app',
   qr: 'Código QR de instalación',
 }
-const esPrincipal = computed(() => ['agenda', 'informes', 'clientes', 'usuarios', 'ajustes', 'instalar', 'qr'].includes(vista.value))
+const esPrincipal = computed(() => ['agenda', 'informes', 'clientes', 'usuarios', 'empresas', 'ajustes', 'instalar', 'qr'].includes(vista.value))
 const error = computed(() => V.error.value || I.error.value)
 watch(error, (e) => e && vista.value !== 'usuarios' && toast.error(e))
 const cargando = computed(() => V.cargando.value || I.cargando.value)
@@ -324,6 +326,7 @@ const arbol = computed(() => {
         hoja('clientes', 'Lista de clientes', ['clientes']),
         hoja('cliente-nuevo', 'Nuevo cliente', ['clientes'], { opcion: 'nuevo' }),
       ]),
+    esPlataforma.value && hoja('empresas', 'Empresas', ['empresas'], { icono: Building2 }),
     esSuper.value &&
       grupo('administracion', 'Administración', ShieldCheck, [
         hoja('usuarios', 'Usuarios', ['usuarios']),
@@ -461,6 +464,7 @@ function salirDelMenu() {
       <QrInstalarView v-else-if="vista === 'qr' && puedeAgendar" />
       <ClaveView v-else-if="vista === 'clave'" @listo="ir('agenda')" />
       <UsuariosView v-else-if="vista === 'usuarios' && esSuper" />
+      <EmpresasView v-else-if="vista === 'empresas' && esPlataforma" />
     </main>
 
     <template v-if="esPrincipal">

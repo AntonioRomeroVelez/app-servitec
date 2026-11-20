@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
 import { crearTransporte } from '../../src/supabase/transporte.js'
+import { prepararPlataforma, crearEmpresaConAdmin } from './ayudas.mjs'
 
 const aqui = dirname(fileURLToPath(import.meta.url))
 const env = Object.fromEntries(readFileSync(join(aqui, '.env'), 'utf8').split('\n').filter(Boolean).map((l) => l.split(/=(.*)/s).slice(0, 2)))
@@ -106,9 +107,11 @@ const sufijo = Date.now()
 const A = nuevo()
 const B = nuevo()
 const T = nuevo()
+const P = nuevo()
 const clave = 'ClaveSegura123'
-await A.call('registrar', { empresa: 'Seguridad Norte', nombre: 'Ana', usuario: 'ana', correo: `ana${sufijo}@a.com`, clave })
-await B.call('registrar', { empresa: 'Otra Empresa', nombre: 'Beto', usuario: 'beto', correo: `beto${sufijo}@b.com`, clave })
+await prepararPlataforma(P, sufijo)
+await crearEmpresaConAdmin(P, A, { empresa: 'Seguridad Norte', nombre: 'Ana', usuario: 'ana', correo: `ana${sufijo}@a.com`, clave })
+await crearEmpresaConAdmin(P, B, { empresa: 'Otra Empresa', nombre: 'Beto', usuario: 'beto', correo: `beto${sufijo}@b.com`, clave })
 await A.call('usuarios_create', { data: { usuario: 'tec1', nombre: 'Técnico Uno', rol: 'tecnico', clave: 'Temporal12345', correo: `tec${sufijo}@a.com` } })
 await T.call('login', { usuario: `tec${sufijo}@a.com`, clave: 'Temporal12345' })
 await T.call('cambiar_clave', { actual: 'Temporal12345', nueva: 'NuevaClave12345' })

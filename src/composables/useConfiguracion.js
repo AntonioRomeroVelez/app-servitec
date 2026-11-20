@@ -21,7 +21,7 @@ const config = ref(guardada())
 
 function aplicar(c) {
   aplicarTema(c.tema)
-  document.title = `${APP.nombre} · ${c.empresa.nombre}`
+  document.title = c.empresa.nombre === APP.nombre ? APP.nombre : `${APP.nombre} · ${c.empresa.nombre}`
 }
 aplicar(config.value) // al cargar la app, con lo último que se conocía
 

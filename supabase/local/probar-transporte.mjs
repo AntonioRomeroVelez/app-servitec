@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { crearTransporte } from '../../src/supabase/transporte.js'
+import { prepararPlataforma, crearEmpresaConAdmin } from './ayudas.mjs'
 
 const env = Object.fromEntries(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '.env'), 'utf8').split('\n').filter(Boolean).map((l) => l.split(/=(.*)/s).slice(0, 2)))
 const memoria = () => {
@@ -25,12 +26,25 @@ const sufijo = Date.now()
 const A = nuevo()
 const B = nuevo()
 const T = nuevo()
+const P = nuevo()
 const claveA = 'ClaveSegura123'
 
-// --- registro de dos empresas y login
-const sa = await A.call('registrar', { empresa: 'Empresa A', nombre: 'Ana Admin', usuario: 'ana', correo: `ana${sufijo}@a.com`, clave: claveA })
-ok(sa.usuario.rol === 'superadmin' && sa.token, 'registrar crea la empresa y entrega sesión de superadmin')
-await B.call('registrar', { empresa: 'Empresa B', nombre: 'Beto', usuario: 'beto', correo: `beto${sufijo}@b.com`, clave: claveA })
+// --- la plataforma crea dos empresas (no hay registro abierto) y sus administradores entran
+await prepararPlataforma(P, sufijo)
+const ea = await crearEmpresaConAdmin(P, A, { empresa: 'Empresa A', usuario: 'ana', nombre: 'Ana Admin', correo: `ana${sufijo}@a.com`, clave: claveA, datos: { ruc: '1790000000001', telefono: '022222222', subtitulo: 'Seguridad' } })
+ok(ea.sesion.usuario.rol === 'superadmin' && ea.sesion.token && ea.sesion.usuario.plataforma === false, 'empresas_create crea la empresa y su administrador (superadmin de esa empresa)')
+const eb = await crearEmpresaConAdmin(P, B, { empresa: 'Empresa B', usuario: 'beto', nombre: 'Beto', correo: `beto${sufijo}@b.com`, clave: claveA })
+ok((await A.call('configuracion_get')).empresa.nombre === 'Empresa A' && (await A.call('configuracion_get')).empresa.ruc === '1790000000001', 'los datos de la empresa quedaron en su configuración')
+await rechaza(() => A.call('empresas_list'), 'el administrador de una empresa no gestiona empresas', /permisos/)
+await rechaza(() => A.cliente.rpc('registrar_empresa', { p_empresa: 'X', p_nombre: 'x', p_usuario: 'xxx' }).then(({ error }) => { if (error) throw new Error(error.message) }), 'el registro abierto está cerrado', /permission|permiso/i)
+const empresasLista = await P.call('empresas_list')
+ok([ea.id, eb.id].every((id) => empresasLista.some((e) => e.id === id)) && empresasLista.find((e) => e.id === ea.id).usuarios === 1, 'empresas_list muestra las empresas y su número de usuarios')
+await rechaza(() => P.call('empresas_create', { data: { nombre: 'Sin admin', admin: { usuario: 'zz', nombre: 'Z', correo: 'z@z.com', clave: 'ClaveSegura123' } } }), 'usuario del administrador inválido', /inválido/)
+await rechaza(() => P.call('empresas_create', { data: { nombre: 'Repetida', admin: { usuario: 'ana', nombre: 'Otra', correo: `ana${sufijo}@a.com`, clave: 'ClaveSegura123' } } }), 'correo ya registrado', /ya está registrado/)
+const idA = ea.id
+await P.call('empresas_update', { id: idA, data: { plan: 'pro', datos: { direccion: 'Av. Principal 123' } } })
+const edit = (await P.call('empresas_list')).find((e) => e.id === idA)
+ok(edit.plan === 'pro' && edit.datos.direccion === 'Av. Principal 123' && edit.datos.ruc === '1790000000001', 'empresas_update cambia plan y datos sin perder los demás')
 await rechaza(() => A.call('login', { usuario: `ana${sufijo}@a.com`, clave: 'mala' }), 'login con clave mala', /incorrectos/)
 ok((await A.call('login', { usuario: `ana${sufijo}@a.com`, clave: claveA })).usuario.usuario === 'ana', 'login correcto')
 
@@ -95,6 +109,13 @@ const rest = await A.call('configuracion_update', { seccion: 'empresa', restable
 ok(rest.empresa === undefined, 'restablecer elimina la sección')
 await rechaza(() => T.call('configuracion_update', { seccion: 'logo', data: { logo: '' } }), 'el técnico no cambia la configuración', /permisos/)
 await rechaza(() => T.call('usuarios_list'), 'el técnico no lista usuarios', /permisos/)
+
+// --- una empresa desactivada deja sin acceso a sus usuarios
+await P.call('empresas_update', { id: idA, data: { activa: false } })
+await rechaza(() => A.call('login', { usuario: `ana${sufijo}@a.com`, clave: claveA }), 'empresa desactivada: sus usuarios no entran', /no pertenece|incorrectos/)
+await P.call('empresas_update', { id: idA, data: { activa: true } })
+await A.call('login', { usuario: `ana${sufijo}@a.com`, clave: claveA })
+ok(true, 'al reactivarla vuelven a entrar')
 
 // --- fotos (la subida real se prueba en probar-fotos.mjs) y cierre de sesión
 ok((await A.call('fotos_list', { visitaId: v.id })).length === 0, 'fotos_list funciona (vacía)')

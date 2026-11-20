@@ -13,12 +13,16 @@ insert into auth.users values
  ('a0000000-0000-0000-0000-000000000001', 'sa@a.com'), ('a0000000-0000-0000-0000-000000000002', 'sb@b.com'),
  ('a0000000-0000-0000-0000-000000000003', 'tec@a.com'), ('a0000000-0000-0000-0000-000000000004', 'tec2@a.com');
 
-select pg_temp.como('a0000000-0000-0000-0000-000000000001');
-select public.registrar_empresa('Empresa A', 'Super A', 'supera');
-reset role;
-select pg_temp.como('a0000000-0000-0000-0000-000000000002');
-select public.registrar_empresa('Empresa B', 'Super B', 'superb');
-reset role;
+-- Las empresas las crea la plataforma; aquí se insertan directo (con service role) sus datos y superadmins
+insert into empresas (nombre) values ('Empresa A'), ('Empresa B');
+insert into perfiles (id, empresa_id, usuario, nombre, rol)
+select 'a0000000-0000-0000-0000-000000000001', id, 'supera', 'Super A', 'superadmin' from empresas where nombre = 'Empresa A';
+insert into perfiles (id, empresa_id, usuario, nombre, rol)
+select 'a0000000-0000-0000-0000-000000000002', id, 'superb', 'Super B', 'superadmin' from empresas where nombre = 'Empresa B';
+insert into configuracion (empresa_id, clave, valor)
+select id, 'informes', '{"prefijo": "INF"}' from empresas;
+insert into configuracion (empresa_id, clave, valor) select id, 'tema', '{}' from empresas;
+insert into configuracion (empresa_id, clave, valor) select id, 'empresa', '{}' from empresas;
 
 -- el superadmin A (con service role) crea dos técnicos en su empresa
 insert into perfiles (id, empresa_id, usuario, nombre, rol)

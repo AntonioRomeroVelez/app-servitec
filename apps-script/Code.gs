@@ -486,7 +486,7 @@ const NOMBRES_CONFIG = { empresa: 'Datos de la empresa', tema: 'Colores', logo: 
 
 // Mismos valores que src/configuracion.js (hay una prueba que comprueba que no se desincronicen)
 const CONFIG_DEFECTO = {
-  empresa: { nombre: 'FERISEL', subtitulo: 'SECURITY SOLUTIONS', ruc: '', direccion: '', telefono: '', correo: '', web: '', pie: '' },
+  empresa: { nombre: 'ServiTec', subtitulo: '', ruc: '', direccion: '', telefono: '', correo: '', web: '', pie: '' },
   tema: { primario: '#1565d8', acento: '#f6c915' },
   logo: '',
   informes: { prefijo: 'INF', pdfChecklist: true, pdfFotos: true, pdfFirma: true, pdfObservaciones: true },
