@@ -1,4 +1,5 @@
 .env
+supabase/local/.env
 .env.local
 dist
 dist-local

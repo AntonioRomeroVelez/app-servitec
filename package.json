@@ -8,7 +8,10 @@
     "build": "vite build",
     "preview": "vite preview --host",
     "test:gs": "node --test \"apps-script/test/*.test.js\"",
-    "servidor:local": "node apps-script/test/servidor-local.js"
+    "servidor:local": "node apps-script/test/servidor-local.js",
+    "supabase:local": "node supabase/local/iniciar.mjs",
+    "supabase:detener": "docker compose -f supabase/local/docker-compose.yml --env-file supabase/local/.env down",
+    "supabase:probar": "node supabase/local/probar.mjs"
   },
   "dependencies": {
     "lucide-vue-next": "^1.0.0",
