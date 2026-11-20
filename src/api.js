@@ -12,7 +12,7 @@ const SCRIPT_URL = import.meta.env.VITE_SCRIPT_URL
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 export const modoSupabase = !!SUPABASE_URL
 export const modoDemo = !SCRIPT_URL && !modoSupabase
-const supabase = modoSupabase ? crearTransporte({ url: SUPABASE_URL, anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY }) : null
+const supabase = modoSupabase ? crearTransporte({ url: SUPABASE_URL, anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY, fotosUrl: import.meta.env.VITE_FOTOS_URL }) : null
 export const SESION_KEY = 'ferisel-sesion'
 
 let onAuthError = () => {}

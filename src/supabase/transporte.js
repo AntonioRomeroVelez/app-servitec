@@ -26,13 +26,40 @@ function aError(e) {
   return fallo(msg || 'Error inesperado')
 }
 
-export function crearTransporte({ url, anonKey, storage }) {
+// fotosUrl: dirección del Apps Script de fotos (apps-script-fotos). llamarFotos(cuerpo) permite sustituirlo en pruebas.
+export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }) {
   const sb = createClient(url, anonKey, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false, storageKey: 'servitec-supabase', ...(storage ? { storage } : {}) },
   })
   const ok = ({ data, error }) => {
     if (error) throw aError(error)
     return data
+  }
+
+  // ---------- servicio de fotos (Google Drive vía Apps Script, con el token del usuario) ----------
+  async function servicioFotos(action, payload) {
+    const { access_token: token } = await sesion()
+    const cuerpo = { action, token, ...payload }
+    if (llamarFotos) return llamarFotos(cuerpo)
+    if (!fotosUrl) throw fallo('Falta configurar VITE_FOTOS_URL (servicio de fotos en Google Drive)')
+    const control = new AbortController()
+    const limite = setTimeout(() => control.abort(), 90000)
+    let res
+    try {
+      res = await fetch(fotosUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(cuerpo), signal: control.signal })
+    } catch {
+      throw fallo('Sin conexión con el servidor', 'RED')
+    } finally {
+      clearTimeout(limite)
+    }
+    let json
+    try {
+      json = await res.json()
+    } catch {
+      throw fallo('El servicio de fotos no respondió correctamente', 'RED')
+    }
+    if (!json.ok) throw fallo(json.error || 'Error del servicio de fotos', json.code)
+    return json.data
   }
 
   // ---------- perfiles (usuarios de la empresa): caché para traducir uuid <-> nombre de usuario ----------
@@ -108,6 +135,7 @@ export function crearTransporte({ url, anonKey, storage }) {
     if (d.checklist !== undefined) r.checklist = typeof d.checklist === 'string' ? JSON.parse(d.checklist || '[]') : d.checklist
     return r
   }
+  const fotoOut = (c, f) => ({ id: f.id, visitaId: f.visita_id ?? f.visitaId, nombre: f.nombre, mini: f.mini, autor: nombreDe(c, f.autor), creado: f.creado })
   const clienteOut = (c, r) => ({ id: r.id, nombre: r.nombre, direccion: r.direccion, telefono: r.telefono, autor: nombreDe(c, r.autor), creado: r.creado, modificadoPor: nombreDe(c, r.modificado_por), actualizado: r.actualizado })
 
   // Texto de búsqueda seguro para un filtro `or` de PostgREST
@@ -337,6 +365,9 @@ export function crearTransporte({ url, anonKey, storage }) {
       return visitaOut(c, r)
     },
     async visitas_delete({ id }) {
+      // Las fotos van a la papelera de Drive antes de que la base borre sus filas
+      const { count } = await sb.from('fotos').select('id', { count: 'exact', head: true }).eq('visita_id', id)
+      if (count) await servicioFotos('eliminar_de_visita', { visitaId: id })
       const r = ok(await sb.from('visitas').delete().eq('id', id).select('id'))
       if (!r.length) throw fallo('No encontrado')
       return true
@@ -384,21 +415,21 @@ export function crearTransporte({ url, anonKey, storage }) {
       return true
     },
 
-    // ---- fotos: la lista sale de la base; el archivo vive en Google Drive (se conecta en la fase 3) ----
+    // ---- fotos: la lista sale de la base; el archivo vive en Google Drive (empresa > usuario > mes) ----
     async fotos_list({ visitaId }) {
       const c = await perfiles()
       const filas = ok(await sb.from('fotos').select('id,visita_id,nombre,mini,autor,creado').eq('visita_id', visitaId).order('creado'))
-      return filas.map((f) => ({ id: f.id, visitaId: f.visita_id, nombre: f.nombre, mini: f.mini, autor: nombreDe(c, f.autor), creado: f.creado }))
+      return filas.map((f) => fotoOut(c, f))
     },
-    async fotos_upload() {
-      throw fallo('La subida de fotos a Google Drive se habilita en la fase 3 del paso a SaaS.')
+    async fotos_upload({ id, visitaId, imagen, mini }) {
+      const c = await perfiles()
+      return fotoOut(c, await servicioFotos('subir', { id, visitaId, imagen, mini }))
     },
-    async fotos_get() {
-      throw fallo('La descarga de fotos desde Google Drive se habilita en la fase 3 del paso a SaaS.')
+    async fotos_get({ id }) {
+      return servicioFotos('obtener', { id })
     },
     async fotos_delete({ id }) {
-      const r = ok(await sb.from('fotos').delete().eq('id', id).select('id'))
-      if (!r.length) throw fallo('No encontrado')
+      await servicioFotos('eliminar', { id })
       return true
     },
   }

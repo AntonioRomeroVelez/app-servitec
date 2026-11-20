@@ -11,7 +11,7 @@
     "servidor:local": "node apps-script/test/servidor-local.js",
     "supabase:local": "node supabase/local/iniciar.mjs",
     "supabase:detener": "docker compose -f supabase/local/docker-compose.yml --env-file supabase/local/.env down",
-    "supabase:probar": "node supabase/local/probar.mjs && node --import ./supabase/local/registrar.mjs supabase/local/probar-transporte.mjs"
+    "supabase:probar": "node supabase/local/probar.mjs && node --import ./supabase/local/registrar.mjs supabase/local/probar-transporte.mjs && node --import ./supabase/local/registrar.mjs supabase/local/probar-fotos.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.2",

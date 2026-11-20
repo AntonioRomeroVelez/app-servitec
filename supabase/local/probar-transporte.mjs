@@ -96,9 +96,9 @@ ok(rest.empresa === undefined, 'restablecer elimina la sección')
 await rechaza(() => T.call('configuracion_update', { seccion: 'logo', data: { logo: '' } }), 'el técnico no cambia la configuración', /permisos/)
 await rechaza(() => T.call('usuarios_list'), 'el técnico no lista usuarios', /permisos/)
 
-// --- fotos (fase 3) y cierre de sesión
+// --- fotos (la subida real se prueba en probar-fotos.mjs) y cierre de sesión
 ok((await A.call('fotos_list', { visitaId: v.id })).length === 0, 'fotos_list funciona (vacía)')
-await rechaza(() => A.call('fotos_upload', { visitaId: v.id }), 'subir fotos queda para la fase 3', /fase 3/)
+await rechaza(() => A.call('fotos_upload', { id: crypto.randomUUID(), visitaId: v.id, imagen: 'x' }), 'sin servicio de fotos configurado se avisa', /VITE_FOTOS_URL/)
 await A.call('usuarios_update', { id: tec.id, data: { activo: false } })
 T.olvidarCaches() // equivale a que pasen los 30 s del caché de perfil
 await rechaza(() => T.call('visitas_list', {}), 'un usuario desactivado pierde el acceso', /AUTH|expirada|no pertenece/)

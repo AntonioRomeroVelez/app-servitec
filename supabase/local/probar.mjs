@@ -25,7 +25,8 @@ const eb = await llamar('/rest/v1/rpc/registrar_empresa', { method: 'POST', toke
 ok(ea.ok && eb.ok, 'rpc/registrar_empresa crea las empresas', JSON.stringify(ea.datos))
 const yo = await llamar('/rest/v1/perfiles?select=usuario,rol', { token: ta })
 ok(yo.datos?.length === 1 && yo.datos[0].rol === 'superadmin', 'A ve solo su perfil de superadmin')
-const perfilA = (await llamar('/rest/v1/perfiles?select=id', { token: ta })).datos[0].id
+const tecnico = await llamar('/rest/v1/rpc/crear_usuario', { method: 'POST', token: ta, body: JSON.stringify({ p_correo: `tecnico${sufijo}@prueba.com`, p_clave: 'Temporal12345', p_usuario: 'tecnico', p_nombre: 'Técnico', p_rol: 'tecnico' }) })
+const perfilA = tecnico.datos
 const v = await llamar('/rest/v1/visitas', { method: 'POST', token: ta, body: JSON.stringify({ fecha: '2026-11-20', hora: '09:00', cliente: 'Cliente 1', tipo: 'Inspección', responsable: perfilA }) })
 ok(v.ok && v.datos[0].estado === 'Programada', 'A agenda una visita por PostgREST', JSON.stringify(v.datos))
 ok((await llamar('/rest/v1/visitas', { token: ta })).datos.length === 1, 'A lista su visita')
