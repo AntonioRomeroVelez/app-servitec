@@ -1,9 +1,10 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
-import { Building2, Pencil, Plus, Power, X } from 'lucide-vue-next'
+import { Building2, KeyRound, Pencil, Plus, Power, X } from 'lucide-vue-next'
 import { call } from '../api'
 import { useToast } from '../composables/useToast'
-import { normalizar } from '../utils'
+import { normalizar, validarClave } from '../utils'
+import CampoClave from '../components/CampoClave.vue'
 import { personaVacia, validarPersona, limpiarPersona } from '../persona'
 import FormularioPersona from '../components/FormularioPersona.vue'
 import CredencialesNuevas from '../components/CredencialesNuevas.vue'
@@ -99,6 +100,48 @@ async function guardar() {
   }
 }
 
+// ---------- Restablecer la clave del administrador de una empresa (solo la plataforma) ----------
+// Sirve cuando el superadmin de una empresa olvida su clave y nadie de su empresa puede restablecérsela.
+// La clave temporal vuelve a ser su cédula; si no tiene cédula (cuentas antiguas) se escribe una a mano.
+const adminsDe = ref(null) // empresa abierta
+const admins = ref([])
+const cargandoAdmins = ref(false)
+const errorAdmins = ref('')
+const clavesManuales = reactive({}) // id de administrador -> clave escrita a mano
+const claveRestablecida = ref(null) // { nombre, usuario, clave } para entregar
+
+async function abrirAdmins(e) {
+  adminsDe.value = e
+  admins.value = []
+  errorAdmins.value = ''
+  cargandoAdmins.value = true
+  try {
+    admins.value = await call('empresas_admins', { id: e.id })
+  } catch (err) {
+    errorAdmins.value = err.message
+  } finally {
+    cargandoAdmins.value = false
+  }
+}
+
+async function restablecerAdmin(a) {
+  errorAdmins.value = ''
+  const manual = !a.cedula
+  const clave = manual ? String(clavesManuales[a.id] || '') : a.cedula
+  if (manual) {
+    const msg = validarClave(clave, a.usuario)
+    if (msg) return (errorAdmins.value = msg)
+  }
+  try {
+    await call('empresas_restablecer_admin', { id: a.id, clave, temporal: !manual })
+    claveRestablecida.value = { nombre: a.nombre, usuario: a.usuario, clave }
+    clavesManuales[a.id] = ''
+    adminsDe.value = null
+  } catch (err) {
+    errorAdmins.value = err.message
+  }
+}
+
 async function alternar(e) {
   try {
     await call('empresas_update', { id: e.id, data: { activa: !e.activa } })
@@ -177,6 +220,35 @@ async function alternar(e) {
   </form>
   </Modal>
 
+  <!-- Administradores de la empresa: restablecer la clave de uno -->
+  <Modal v-if="adminsDe" :titulo="`Administradores de ${adminsDe.nombre}`" @cerrar="adminsDe = null">
+    <p v-if="cargandoAdmins" class="py-4 text-center text-brand-700">Cargando…</p>
+    <p v-else-if="!admins.length && !errorAdmins" class="py-4 text-center text-sm text-brand-700/70">Esta empresa no tiene administradores.</p>
+    <ul class="grid gap-3">
+      <li v-for="a in admins" :key="a.id" class="grid gap-2 rounded-xl bg-brand-50 p-3" :class="{ 'opacity-60': !a.activo }">
+        <div>
+          <b class="text-brand-900">{{ a.nombre }}</b>
+          <p class="text-sm text-brand-700">@{{ a.usuario }}<template v-if="!a.activo"> · inactivo</template></p>
+          <p v-if="a.correo" class="text-xs break-all text-brand-700/70">{{ a.correo }}</p>
+        </div>
+        <template v-if="a.cedula">
+          <p class="text-xs text-brand-800">La clave volverá a ser su número de cédula (<b class="font-mono">{{ a.cedula }}</b>). Deberá cambiarla al ingresar y se cerrarán sus sesiones abiertas.</p>
+          <button class="btn min-h-11" @click="restablecerAdmin(a)"><KeyRound :size="18" aria-hidden="true" />Restablecer a la cédula</button>
+        </template>
+        <form v-else class="grid gap-2" @submit.prevent="restablecerAdmin(a)">
+          <label class="etiqueta">No tiene cédula: escribe una clave temporal (mínimo 10 caracteres, con letras y números)
+            <CampoClave v-model="clavesManuales[a.id]" autocomplete="new-password" required minlength="10" />
+          </label>
+          <button class="btn min-h-11"><KeyRound :size="18" aria-hidden="true" />Restablecer clave</button>
+        </form>
+      </li>
+    </ul>
+    <p v-if="errorAdmins" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ errorAdmins }}</p>
+  </Modal>
+  <Modal v-if="claveRestablecida" titulo="Clave restablecida" @cerrar="claveRestablecida = null">
+    <CredencialesNuevas accion="Clave restablecida" v-bind="claveRestablecida" @listo="claveRestablecida = null" />
+  </Modal>
+
   <p v-if="cargando && !empresas.length" class="py-10 text-center text-brand-700">Cargando…</p>
   <p v-else-if="!empresas.length" class="py-10 text-center text-brand-700/70">Todavía no hay empresas.</p>
   <p v-else-if="!filtradas.length" class="py-10 text-center text-brand-700/70">No hay empresas que coincidan.</p>
@@ -191,6 +263,7 @@ async function alternar(e) {
       </span>
       <span class="flex shrink-0 gap-1">
         <button class="flex size-10 items-center justify-center rounded-xl border border-brand-200 text-brand-700" aria-label="Editar datos" @click="abrir(e)"><Pencil :size="18" aria-hidden="true" /></button>
+        <button class="flex size-10 items-center justify-center rounded-xl border border-brand-200 text-brand-700" aria-label="Restablecer la clave del administrador" @click="abrirAdmins(e)"><KeyRound :size="18" aria-hidden="true" /></button>
         <button class="flex size-10 items-center justify-center rounded-xl border border-brand-200" :class="e.activa ? 'text-red-600' : 'text-emerald-700'" :aria-label="e.activa ? 'Desactivar empresa' : 'Activar empresa'" @click="alternar(e)"><Power :size="18" aria-hidden="true" /></button>
       </span>
     </li>

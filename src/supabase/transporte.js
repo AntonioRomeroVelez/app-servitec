@@ -254,6 +254,18 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
       // la clave temporal del administrador es su cédula (la base la aplica)
       return ok(await sb.rpc('crear_empresa', { p: { ...d, admin: limpiarPersona(a) } }))
     },
+    // Administradores (superadmin) de una empresa y restablecer la clave de uno de ellos (la clave temporal es la cédula)
+    async empresas_admins({ id }) {
+      return ok(await sb.rpc('listar_admins_empresa', { p_empresa: id })).map((a) => ({ id: a.id, usuario: a.usuario, nombre: a.nombre, correo: a.correo || '', cedula: a.cedula || '', activo: a.activo }))
+    },
+    async empresas_restablecer_admin({ id, clave, temporal }) {
+      if (clave && !temporal) {
+        const msg = validarClave(clave, '')
+        if (msg) throw fallo(msg)
+      }
+      ok(await sb.rpc('restablecer_clave_admin', { p_id: id, p_clave: clave || null }))
+      return true
+    },
     async empresas_update({ id, data: d }) {
       ok(await sb.rpc('editar_empresa', { p_id: id, p: d }))
       return true

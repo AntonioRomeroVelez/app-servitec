@@ -188,6 +188,21 @@ ok((await V2.call('login', { usuario: vic.usuario, clave: cedulaDe(60) })).usuar
 await rechaza(() => V2.call('dashboard_resumen'), 'mientras no la cambie no puede usar la app', /cambiar tu clave|CAMBIAR/)
 ok((await A.call('usuarios_update', { id: ea.sesion.usuario.id, data: { nombre: ea.sesion.usuario.nombre } })).usuario === ea.usuario, 'el superadmin sigue pudiendo editar datos de su propio perfil')
 
+// --- la plataforma restablece la clave del administrador de cualquier empresa
+const empC = await crearEmpresaConAdmin(P, nuevo(), { empresa: 'Empresa C', nombre: 'Carla Cevallos Mora', clave: 'ClaveCarla12345', n: 70 })
+const adminsC = await P.call('empresas_admins', { id: empC.id })
+ok(adminsC.length === 1 && adminsC[0].usuario === empC.usuario && adminsC[0].cedula === cedulaDe(70), 'empresas_admins lista los administradores de la empresa')
+await rechaza(() => A.call('empresas_admins', { id: empC.id }), 'el superadmin de una empresa no administra las de otras', /permisos/)
+await P.call('empresas_restablecer_admin', { id: adminsC[0].id, clave: adminsC[0].cedula, temporal: true })
+const CC = nuevo()
+ok((await CC.call('login', { usuario: empC.usuario, clave: cedulaDe(70) })).usuario.cambiarClave === true, 'la plataforma restablece al administrador: entra con la cédula y debe cambiarla')
+await rechaza(() => nuevo().call('login', { usuario: empC.usuario, clave: 'ClaveCarla12345' }), 'la clave anterior del administrador ya no sirve', /incorrectos/)
+await rechaza(() => P.call('empresas_restablecer_admin', { id: vic.id, clave: cedulaDe(60), temporal: true }), 'solo restablece superadmins, no técnicos ni admins', /No encontrado/)
+await rechaza(() => P.call('empresas_restablecer_admin', { id: ea.sesion.usuario.id, clave: 'corta' }), 'una clave escrita a mano debe cumplir la política', /10 caracteres|letras/)
+await rechaza(() => A.call('empresas_restablecer_admin', { id: adminsC[0].id, clave: cedulaDe(70), temporal: true }), 'el superadmin de otra empresa no puede usar esta vía', /permisos/)
+ok((await A.cliente.rpc('restablecer_clave_admin', { p_id: adminsC[0].id })).error?.message?.includes('Sin permisos'), 'ni por la API directa')
+ok((await P.cliente.rpc('restablecer_clave_admin', { p_id: (await P.call('me')).id })).error?.message?.includes('Mi cuenta'), 'la plataforma no restablece su propia clave por esta vía')
+
 // --- Dashboard: cifras por rol (el técnico solo cuenta lo suyo) y resumen de la plataforma
 const dA = await A.call('dashboard_resumen')
 const dT = await T.call('dashboard_resumen')
