@@ -7,6 +7,7 @@ import { validarClave, normalizar } from '../utils'
 import CampoClave from '../components/CampoClave.vue'
 import BarraFiltros from '../components/BarraFiltros.vue'
 import Paginador from '../components/Paginador.vue'
+import Modal from '../components/Modal.vue'
 import { usePaginaLocal } from '../composables/usePaginaLocal'
 
 // Empresas del SaaS. Solo las crea y edita el superadmin de la plataforma: pone el nombre, llena sus datos y crea
@@ -109,21 +110,17 @@ async function alternar(e) {
       </select>
     </template>
     <template #acciones>
-      <button class="btn-acento !min-h-10 !px-3 flex-none" :aria-label="editando === 'nueva' ? 'Cerrar' : 'Nueva empresa'" @click="editando === 'nueva' ? cerrar() : abrir(null)">
-        <X v-if="editando === 'nueva'" :size="18" aria-hidden="true" />
-        <Plus v-else :size="18" aria-hidden="true" />
-        <span class="sr-only sm:not-sr-only">{{ editando === 'nueva' ? 'Cerrar' : 'Nueva' }}</span>
+      <button class="btn-acento !min-h-10 !px-3 flex-none" aria-label="Nueva empresa" @click="abrir(null)">
+        <Plus :size="18" aria-hidden="true" />
+        <span class="sr-only sm:not-sr-only">Nueva</span>
       </button>
     </template>
   </BarraFiltros>
 
   <p v-if="error && !editando" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
-  <form v-if="editando" class="tarjeta mb-4 grid gap-3" @submit.prevent="guardar">
-    <div class="flex items-center justify-between">
-      <h2 class="font-bold text-brand-900">{{ editando === 'nueva' ? 'Nueva empresa' : 'Datos de la empresa' }}</h2>
-      <button type="button" class="flex size-9 items-center justify-center rounded-full text-brand-700 active:bg-brand-50" aria-label="Cerrar" @click="cerrar"><X :size="18" aria-hidden="true" /></button>
-    </div>
+  <Modal v-if="editando" :titulo="editando === 'nueva' ? 'Nueva empresa' : 'Datos de la empresa'" @cerrar="cerrar">
+  <form class="grid gap-3" @submit.prevent="guardar">
     <label class="etiqueta">Nombre de la empresa
       <input v-model.trim="form.nombre" class="campo" required />
     </label>
@@ -174,6 +171,7 @@ async function alternar(e) {
     <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
     <button class="btn-acento" :disabled="guardando">{{ guardando ? 'Guardando…' : editando === 'nueva' ? 'Crear empresa' : 'Guardar' }}</button>
   </form>
+  </Modal>
 
   <p v-if="cargando && !empresas.length" class="py-10 text-center text-brand-700">Cargando…</p>
   <p v-else-if="!empresas.length" class="py-10 text-center text-brand-700/70">Todavía no hay empresas.</p>

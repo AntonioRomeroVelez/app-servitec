@@ -18,6 +18,7 @@ import FormInforme from './views/FormInforme.vue'
 import DetalleInforme from './views/DetalleInforme.vue'
 import UsuariosView from './views/UsuariosView.vue'
 import EmpresasView from './views/EmpresasView.vue'
+import Modal from './components/Modal.vue'
 import ClaveView from './views/ClaveView.vue'
 import NotificacionesView from './views/NotificacionesView.vue'
 import PendientesView from './views/PendientesView.vue'
@@ -51,8 +52,9 @@ function seguirDeInstalacion() {
 }
 CFG.cargar() // marca de la empresa: pública, se pide también antes de iniciar sesión
 
-// Vistas: agenda | visita-nueva | visita-detalle | visita-editar
-//         informes | informe-nuevo | informe-detalle | informe-editar | usuarios
+// Vistas: agenda | visita-detalle | visita-editar
+//         informes | informe-detalle | informe-editar | usuarios
+// Crear visita o informe no es una vista: abre un modal (ver `modal`)
 const vista = ref('agenda')
 const seleccionadoId = ref(null)
 const visitaOrigen = ref(null) // visita desde la que se crea un informe
@@ -68,11 +70,9 @@ const prefill = computed(() => {
 
 const TITULOS = {
   agenda: 'Agenda de visitas',
-  'visita-nueva': 'Nueva visita',
   'visita-detalle': 'Visita',
   'visita-editar': 'Editar visita',
   informes: 'Informes',
-  'informe-nuevo': 'Nuevo informe',
   'informe-detalle': 'Informe',
   'informe-editar': 'Editar informe',
   usuarios: 'Usuarios',
@@ -90,7 +90,11 @@ const error = computed(() => V.error.value || I.error.value)
 watch(error, (e) => e && vista.value !== 'usuarios' && toast.error(e))
 const cargando = computed(() => V.cargando.value || I.cargando.value)
 
+// Crear una visita o un informe abre un modal sobre la pantalla actual ('visita' | 'informe'); navegar lo cierra
+const modal = ref(null)
+
 function ir(v, id = null) {
+  modal.value = null
   vista.value = v
   seleccionadoId.value = id
   window.scrollTo(0, 0)
@@ -123,12 +127,12 @@ const prefillVisita = ref(null)
 
 function nuevaVisita() {
   prefillVisita.value = null
-  ir('visita-nueva')
+  modal.value = 'visita'
 }
 
 function agendarParaCliente(c) {
   prefillVisita.value = { cliente: c.nombre, direccion: c.direccion, telefono: c.telefono }
-  ir('visita-nueva')
+  modal.value = 'visita'
 }
 
 // Tocar un aviso lleva a la visita o al informe al que se refiere
@@ -145,8 +149,6 @@ function volver() {
       return abrirVisita(id)
     case 'informe-editar':
       return abrirInforme('informe-detalle', id)
-    case 'informe-nuevo':
-      return visitaOrigen.value ? abrirVisita(visitaOrigen.value) : ir('informes')
     case 'informe-detalle':
       return ir('informes')
     default:
@@ -157,13 +159,17 @@ function volver() {
 // --- Visitas ---
 async function guardarVisita(data) {
   try {
-    if (vista.value === 'visita-editar') {
-      await V.actualizar(seleccionadoId.value, data)
-      abrirVisita(seleccionadoId.value)
-    } else {
-      const v = await V.crear(data)
-      abrirVisita(v.id)
-    }
+    await V.actualizar(seleccionadoId.value, data)
+    abrirVisita(seleccionadoId.value)
+  } catch {
+    /* el error se muestra en el banner */
+  }
+}
+
+async function crearVisita(data) {
+  try {
+    const v = await V.crear(data)
+    abrirVisita(v.id)
   } catch {
     /* el error se muestra en el banner */
   }
@@ -184,25 +190,34 @@ async function borrarVisita() {
 
 function crearInformeDeVisita() {
   visitaOrigen.value = seleccionadoId.value
-  ir('informe-nuevo', seleccionadoId.value)
+  modal.value = 'informe'
 }
 
 // --- Informes ---
 function nuevoInforme() {
   visitaOrigen.value = null
-  ir('informe-nuevo')
+  modal.value = 'informe'
+}
+
+function cerrarModal() {
+  modal.value = null
+  visitaOrigen.value = null
 }
 
 async function guardarInforme(data) {
   try {
-    if (vista.value === 'informe-editar') {
-      await I.actualizar(seleccionadoId.value, data)
-      abrirInforme('informe-detalle', seleccionadoId.value)
-    } else {
-      const item = await I.crear(data)
-      visitaOrigen.value = null
-      abrirInforme('informe-detalle', item.id)
-    }
+    await I.actualizar(seleccionadoId.value, data)
+    abrirInforme('informe-detalle', seleccionadoId.value)
+  } catch {
+    /* banner */
+  }
+}
+
+async function crearInforme(data) {
+  try {
+    const item = await I.crear(data)
+    visitaOrigen.value = null
+    abrirInforme('informe-detalle', item.id)
   } catch {
     /* banner */
   }
@@ -399,7 +414,6 @@ function salirDelMenu() {
     <main class="mx-auto max-w-3xl px-4 pt-3 pb-24 print:max-w-none print:p-0">
       <!-- Agenda -->
       <AgendaView v-if="vista === 'agenda'" :visitas="V.items.value" :cargando="cargando" :mostrar-autor="esSuper" :nombre-de="T.nombreDe" :total="V.meta.value.total" :offset="V.parametros.value.offset || 0" :limite="V.limite" :filtros="V.parametros.value" @abrir="(id) => abrirVisita(id)" @refrescar="recargar" @buscar="(p) => V.cargar(p).catch(() => {})" @pagina="(o) => V.irAPagina(o).catch(() => {})" />
-      <FormVisita v-else-if="vista === 'visita-nueva' && puedeAgendar" :tecnicos="T.tecnicos.value" :prefill="prefillVisita" :cargando="cargando" @guardar="guardarVisita" @cancelar="ir('agenda')" />
       <FormVisita v-else-if="vista === 'visita-editar' && visita && puedeAgendar" :tecnicos="T.tecnicos.value" :inicial="visita" :cargando="cargando" @guardar="guardarVisita" @cancelar="abrirVisita(seleccionadoId)" />
       <DetalleVisita
         v-else-if="vista === 'visita-detalle' && visita"
@@ -430,7 +444,6 @@ function salirDelMenu() {
         @buscar="(p) => I.cargar(p).catch(() => {})"
         @pagina="(o) => I.irAPagina(o).catch(() => {})"
       />
-      <FormInforme v-else-if="vista === 'informe-nuevo'" :prefill="prefill" :cargando="cargando" @guardar="guardarInforme" @cancelar="volver" />
       <FormInforme v-else-if="vista === 'informe-editar' && informe?._completo" :inicial="informe" :cargando="cargando" @guardar="guardarInforme" @cancelar="abrirInforme('informe-detalle', seleccionadoId)" />
       <DetalleInforme v-else-if="vista === 'informe-detalle' && informe?._completo" :informe="informe" @editar="abrirInforme('informe-editar', seleccionadoId)" @eliminar="borrarInforme" />
 
@@ -445,6 +458,13 @@ function salirDelMenu() {
       <UsuariosView v-else-if="vista === 'usuarios' && esSuper" />
       <EmpresasView v-else-if="vista === 'empresas' && esPlataforma" />
     </main>
+
+    <Modal v-if="modal === 'visita' && puedeAgendar" titulo="Nueva visita" @cerrar="cerrarModal">
+      <FormVisita :tecnicos="T.tecnicos.value" :prefill="prefillVisita" :cargando="cargando" @guardar="crearVisita" @cancelar="cerrarModal" />
+    </Modal>
+    <Modal v-if="modal === 'informe'" titulo="Nuevo informe" @cerrar="cerrarModal">
+      <FormInforme :prefill="prefill" :cargando="cargando" @guardar="crearInforme" @cancelar="cerrarModal" />
+    </Modal>
 
     <template v-if="esPrincipal">
       <button

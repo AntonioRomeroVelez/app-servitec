@@ -7,6 +7,7 @@ import { validarClave } from '../utils'
 import CampoClave from '../components/CampoClave.vue'
 import BarraFiltros from '../components/BarraFiltros.vue'
 import Paginador from '../components/Paginador.vue'
+import Modal from '../components/Modal.vue'
 import { usePaginaLocal } from '../composables/usePaginaLocal'
 import { normalizar } from '../utils'
 import { modoSupabase } from '../api'
@@ -106,17 +107,18 @@ onMounted(() => cargar().catch(() => {}))
       </select>
     </template>
     <template #acciones>
-      <button class="btn-acento !min-h-10 !px-3 flex-none" :aria-label="mostrarForm ? 'Cerrar' : 'Nuevo usuario'" @click="mostrarForm = !mostrarForm">
-        <X v-if="mostrarForm" :size="18" aria-hidden="true" />
-        <Plus v-else :size="18" aria-hidden="true" />
-        <span class="sr-only sm:not-sr-only">{{ mostrarForm ? 'Cerrar' : 'Nuevo' }}</span>
+      <button class="btn-acento !min-h-10 !px-3 flex-none" aria-label="Nuevo usuario" @click="mostrarForm = true">
+        <Plus :size="18" aria-hidden="true" />
+        <span class="sr-only sm:not-sr-only">Nuevo</span>
       </button>
     </template>
   </BarraFiltros>
 
   <p v-if="error || aviso" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso || error }}</p>
 
-  <form v-if="mostrarForm" class="tarjeta mb-4 grid gap-3" @submit.prevent="agregar">
+  <Modal v-if="mostrarForm" titulo="Nuevo usuario" @cerrar="mostrarForm = false">
+  <p v-if="error || aviso" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso || error }}</p>
+  <form class="grid gap-3" @submit.prevent="agregar">
     <label class="etiqueta">Usuario
       <input v-model="nuevo.usuario" class="campo" required autocapitalize="none" pattern="[a-z0-9._\-]{3,30}" title="3 a 30 caracteres: letras minúsculas, números, punto, guion o guion bajo" />
     </label>
@@ -137,6 +139,7 @@ onMounted(() => cargar().catch(() => {}))
     <p class="text-xs text-brand-700/80">El usuario deberá cambiarla en su primer ingreso.</p>
     <button class="btn" :disabled="cargando">Crear usuario</button>
   </form>
+  </Modal>
 
   <ul class="grid gap-2.5">
     <li v-for="u in pag.visibles.value" :key="u.id" class="tarjeta grid gap-2" :class="{ 'opacity-60': !u.activo }">

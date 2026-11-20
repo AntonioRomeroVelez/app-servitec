@@ -7,6 +7,7 @@ import { useClientes } from '../composables/useClientes'
 import EstadoBadge from '../components/EstadoBadge.vue'
 import BarraFiltros from '../components/BarraFiltros.vue'
 import Paginador from '../components/Paginador.vue'
+import Modal from '../components/Modal.vue'
 import { fechaCorta } from '../utils'
 
 // Catálogo de clientes. Se llena solo al registrar visitas (el cliente nuevo se registra al guardar la visita);
@@ -70,17 +71,17 @@ async function alternarVisitas(c) {
 <template>
   <BarraFiltros v-model="q" placeholder="Buscar por nombre, teléfono o dirección">
     <template #acciones>
-      <button class="btn-acento !min-h-10 !px-3 flex-none" :aria-label="editando === 'nuevo' ? 'Cerrar' : 'Nuevo cliente'" @click="editando === 'nuevo' ? (editando = null) : abrirForm(null)">
-        <X v-if="editando === 'nuevo'" :size="18" aria-hidden="true" />
-        <Plus v-else :size="18" aria-hidden="true" />
-        <span class="sr-only sm:not-sr-only">{{ editando === 'nuevo' ? 'Cerrar' : 'Nuevo' }}</span>
+      <button class="btn-acento !min-h-10 !px-3 flex-none" aria-label="Nuevo cliente" @click="abrirForm(null)">
+        <Plus :size="18" aria-hidden="true" />
+        <span class="sr-only sm:not-sr-only">Nuevo</span>
       </button>
     </template>
   </BarraFiltros>
 
   <p v-if="C.error.value" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ C.error.value }}</p>
 
-  <form v-if="editando === 'nuevo'" class="tarjeta mb-3 grid gap-3" @submit.prevent="guardar">
+  <Modal v-if="editando === 'nuevo'" titulo="Nuevo cliente" @cerrar="editando = null">
+  <form class="grid gap-3" @submit.prevent="guardar">
     <label class="etiqueta">Nombre
       <input v-model.trim="form.nombre" class="campo" required maxlength="120" />
     </label>
@@ -92,6 +93,7 @@ async function alternarVisitas(c) {
     </label>
     <button class="btn" :disabled="C.cargando.value">Registrar cliente</button>
   </form>
+  </Modal>
 
   <p v-if="C.cargando.value && !C.items.value.length" class="py-10 text-center text-brand-700">Cargando…</p>
   <p v-else-if="!C.items.value.length" class="py-10 text-center text-brand-700/70">
