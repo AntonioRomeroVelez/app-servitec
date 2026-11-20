@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
 import { crearTransporte } from '../../src/supabase/transporte.js'
-import { prepararPlataforma, crearEmpresaConAdmin } from './ayudas.mjs'
+import { prepararPlataforma, crearEmpresaConAdmin, crearUsuario, cedulaDe } from './ayudas.mjs'
 
 const aqui = dirname(fileURLToPath(import.meta.url))
 const env = Object.fromEntries(readFileSync(join(aqui, '.env'), 'utf8').split('\n').filter(Boolean).map((l) => l.split(/=(.*)/s).slice(0, 2)))
@@ -110,12 +110,12 @@ const T = nuevo()
 const P = nuevo()
 const clave = 'ClaveSegura123'
 await prepararPlataforma(P, sufijo)
-await crearEmpresaConAdmin(P, A, { empresa: 'Seguridad Norte', nombre: 'Ana', usuario: 'ana', correo: `ana${sufijo}@a.com`, clave })
-await crearEmpresaConAdmin(P, B, { empresa: 'Otra Empresa', nombre: 'Beto', usuario: 'beto', correo: `beto${sufijo}@b.com`, clave })
-await A.call('usuarios_create', { data: { usuario: 'tec1', nombre: 'Técnico Uno', rol: 'tecnico', clave: 'Temporal12345', correo: `tec${sufijo}@a.com` } })
-await T.call('login', { usuario: `tec${sufijo}@a.com`, clave: 'Temporal12345' })
-await T.call('cambiar_clave', { actual: 'Temporal12345', nueva: 'NuevaClave12345' })
-const v = await A.call('visitas_create', { data: { fecha: '2026-11-21', hora: '09:00', cliente: 'Ferretería Sol', tipo: 'Inspección', responsable: 'tec1' } })
+await crearEmpresaConAdmin(P, A, { empresa: 'Seguridad Norte', nombre: 'Ana Fotos Pérez', clave })
+await crearEmpresaConAdmin(P, B, { empresa: 'Otra Empresa', nombre: 'Beto Fotos Ríos', clave })
+const tec = await crearUsuario(A, 'Técnico Fotos Gómez', 'tecnico', 1)
+await T.call('login', { usuario: tec.usuario, clave: cedulaDe(1) })
+await T.call('cambiar_clave', { actual: cedulaDe(1), nueva: 'NuevaClave12345' })
+const v = await A.call('visitas_create', { data: { fecha: '2026-11-21', hora: '09:00', cliente: 'Ferretería Sol', tipo: 'Inspección', responsable: tec.usuario } })
 
 const jpeg = (txt) => Buffer.from(`JPEG-${txt}`).toString('base64')
 await rechaza(() => T.call('fotos_upload', { id: crypto.randomUUID(), visitaId: v.id, imagen: jpeg('a'), mini: 'm' }), 'el técnico no sube fotos sin aceptar la visita', /Acepta la visita/)
@@ -123,10 +123,10 @@ await T.call('visitas_update', { id: v.id, data: { estado: 'Aceptada' } })
 
 const id1 = crypto.randomUUID()
 const f1 = await T.call('fotos_upload', { id: id1, visitaId: v.id, imagen: jpeg('uno'), mini: 'mini1' })
-ok(f1.id === id1 && f1.autor === 'tec1' && f1.visitaId === v.id && f1.mini === 'mini1', 'fotos_upload devuelve la foto con autor por nombre de usuario', JSON.stringify(f1))
+ok(f1.id === id1 && f1.autor === tec.usuario && f1.visitaId === v.id && f1.mini === 'mini1', 'fotos_upload devuelve la foto con autor por nombre de usuario', JSON.stringify(f1))
 const archivo1 = [...archivos.values()][0]
 const mes = sql(`select mes from fotos where id = '${id1}'`)
-ok(/^\d{4}-\d{2}$/.test(mes) && archivo1.carpeta.ruta() === `ServiTec Fotos/${[...carpetas.values()].find((c) => c.nombre.startsWith('Seguridad Norte')).nombre}/tec1/${mes}`, `el archivo quedó en empresa/usuario/mes: ${archivo1.carpeta.ruta()}`)
+ok(/^\d{4}-\d{2}$/.test(mes) && archivo1.carpeta.ruta() === `ServiTec Fotos/${[...carpetas.values()].find((c) => c.nombre.startsWith('Seguridad Norte')).nombre}/${tec.usuario}/${mes}`, `el archivo quedó en empresa/usuario/mes: ${archivo1.carpeta.ruta()}`)
 
 const nCarpetas = carpetas.size
 await T.call('fotos_upload', { id: crypto.randomUUID(), visitaId: v.id, imagen: jpeg('dos'), mini: 'mini2' })

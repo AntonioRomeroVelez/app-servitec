@@ -6,6 +6,13 @@ import { createClient } from '@supabase/supabase-js'
 import { CONFIG_DEFECTO } from '../configuracion'
 import { valorSeccion } from '../validarConfig'
 import { validarClave } from '../utils'
+import { validarPersona, limpiarPersona } from '../persona'
+
+// La cuenta de acceso de cada usuario es <usuario>@servitec.local (el correo real es un dato de contacto): se entra con el usuario
+const emailDeUsuario = (u) => {
+  const x = String(u || '').trim().toLowerCase()
+  return x.includes('@') ? x : `${x}@servitec.local`
+}
 
 const fallo = (msg, code = '') => Object.assign(new Error(msg), { code })
 const esRed = (e) => /failed to fetch|networkerror|fetch failed|load failed|network request failed/i.test(String(e?.message || '')) || e?.status === 0 || e?.name === 'AuthRetryableFetchError'
@@ -65,7 +72,7 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
   // ---------- perfiles (usuarios de la empresa): caché para traducir uuid <-> nombre de usuario ----------
   let cache = null
   const invalidar = () => (cache = null)
-  const COLS_PERFIL = 'id,empresa_id,usuario,nombre,rol,correo,activo,cambiar_clave'
+  const COLS_PERFIL = 'id,empresa_id,usuario,nombre,rol,correo,activo,cambiar_clave,cedula,telefono,ciudad,direccion,cargo'
   async function perfiles() {
     if (!cache) {
       const lista = ok(await sb.from('perfiles').select(COLS_PERFIL).order('usuario'))
@@ -73,7 +80,7 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
     }
     return cache
   }
-  const publico = (p) => ({ id: p.id, usuario: p.usuario, nombre: p.nombre, rol: p.rol, activo: p.activo, cambiarClave: !!p.cambiar_clave, correo: p.correo || '', plataforma: !!p.plataforma })
+  const publico = (p) => ({ id: p.id, usuario: p.usuario, nombre: p.nombre, rol: p.rol, activo: p.activo, cambiarClave: !!p.cambiar_clave, correo: p.correo || '', cedula: p.cedula || '', telefono: p.telefono || '', ciudad: p.ciudad || '', direccion: p.direccion || '', cargo: p.cargo || '', plataforma: !!p.plataforma })
   const nombreDe = (c, id) => (id ? c.porId.get(id)?.usuario || '' : '')
   const idDe = (c, usuario) => {
     if (!usuario) return null
@@ -159,11 +166,11 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
   // ---------- acciones ----------
   const acciones = {
     async login(p) {
-      const { data, error } = await sb.auth.signInWithPassword({ email: String(p.usuario || '').trim().toLowerCase(), password: String(p.clave || '') })
+      const { data, error } = await sb.auth.signInWithPassword({ email: emailDeUsuario(p.usuario), password: String(p.clave || '') })
       if (error) {
         if (esRed(error)) throw aError(error)
         if (error.status === 429) throw fallo('Demasiados intentos fallidos. Intenta de nuevo en unos minutos.', 'LOCKED')
-        throw fallo('Correo o clave incorrectos')
+        throw fallo('Usuario o clave incorrectos')
       }
       olvidar()
       let perfil
@@ -175,7 +182,7 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
       if (!perfil || !perfil.activo) {
         await sb.auth.signOut()
         olvidar()
-        throw fallo(perfil ? 'Correo o clave incorrectos' : 'Tu cuenta no pertenece a ninguna empresa')
+        throw fallo(perfil ? 'Usuario o clave incorrectos' : 'Tu cuenta no pertenece a ninguna empresa')
       }
       return { token: data.session.access_token, usuario: publico(perfil) }
     },
@@ -238,15 +245,14 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
     async empresas_list() {
       return ok(await sb.rpc('listar_empresas')).map((e) => ({ id: e.id, nombre: e.nombre, plan: e.plan, activa: e.activa, creado: e.creado, usuarios: Number(e.usuarios), datos: e.datos }))
     },
+    // Devuelve { empresaId, usuario }: el usuario del administrador se genera de sus nombres completos
     async empresas_create({ data: d }) {
       const a = d.admin || {}
       if (!String(d.nombre || '').trim()) throw fallo('Escribe el nombre de la empresa')
-      if (!/^[a-z0-9._-]{3,30}$/.test(a.usuario || '')) throw fallo('Usuario del administrador inválido: 3 a 30 caracteres (letras minúsculas, números, . _ -)')
-      if (!String(a.nombre || '').trim()) throw fallo('Escribe el nombre del administrador')
-      if (!String(a.correo || '').trim()) throw fallo('Escribe el correo del administrador: lo usará para iniciar sesión')
-      const msg = validarClave(a.clave, a.usuario)
+      const msg = validarPersona(a)
       if (msg) throw fallo(msg)
-      return ok(await sb.rpc('crear_empresa', { p: d }))
+      // la clave temporal del administrador es su cédula (la base la aplica)
+      return ok(await sb.rpc('crear_empresa', { p: { ...d, admin: limpiarPersona(a) } }))
     },
     async empresas_update({ id, data: d }) {
       ok(await sb.rpc('editar_empresa', { p_id: id, p: d }))
@@ -257,29 +263,47 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
     async usuarios_list() {
       return (await perfiles()).lista.map(publico)
     },
+    // Usuario sugerido (primer nombre + últimos 4 dígitos de la cédula; si está ocupado, letras del apellido) y su disponibilidad
+    async usuarios_sugerir({ nombre, cedula }) {
+      return ok(await sb.rpc('sugerir_usuario', { p_nombre: nombre, p_cedula: cedula }))
+    },
+    async usuarios_disponible({ usuario }) {
+      return ok(await sb.rpc('usuario_disponible', { p_usuario: usuario }))
+    },
+
+    // El usuario de ingreso es el indicado (si está libre) o el sugerido; el resultado trae `usuario` para entregárselo
     async usuarios_create({ data: d }) {
-      if (!/^[a-z0-9._-]{3,30}$/.test(d.usuario || '')) throw fallo('Usuario inválido: 3 a 30 caracteres (letras minúsculas, números, . _ -)')
-      if (!String(d.correo || '').trim()) throw fallo('Escribe el correo del usuario: lo usará para iniciar sesión')
-      const msg = validarClave(d.clave, d.usuario)
+      if (!['superadmin', 'admin', 'tecnico'].includes(d.rol)) throw fallo('Elige el rol del usuario')
+      const msg = validarPersona(d)
       if (msg) throw fallo(msg)
-      const id = ok(await sb.rpc('crear_usuario', { p_correo: d.correo, p_clave: d.clave, p_usuario: d.usuario, p_nombre: d.nombre, p_rol: d.rol }))
+      // la clave temporal es la cédula (la base la aplica): la persona debe cambiarla en su primer ingreso
+      const r = ok(await sb.rpc('crear_usuario', { p: { ...limpiarPersona(d), rol: d.rol } }))
       invalidar()
-      return publico((await perfiles()).porId.get(id))
+      return publico((await perfiles()).porId.get(r.id))
     },
     async usuarios_update({ id, data: d }) {
-      const { clave, ...resto } = d
+      // `temporal`: la clave es la cédula (clave temporal), que no pasa la política de claves; la persona debe cambiarla al entrar
+      const { clave, temporal, ...resto } = d
       if (clave) {
-        const msg = validarClave(clave, (await perfiles()).porId.get(id)?.usuario || '')
+        const msg = temporal ? '' : validarClave(clave, (await perfiles()).porId.get(id)?.usuario || '')
         if (msg) throw fallo(msg)
         ok(await sb.rpc('restablecer_clave', { p_id: id, p_clave: clave }))
       }
       const cambios = {}
-      for (const k of ['nombre', 'rol', 'activo', 'correo']) if (resto[k] !== undefined) cambios[k] = resto[k]
+      for (const k of ['nombre', 'rol', 'activo', 'correo', 'cedula', 'telefono', 'ciudad', 'direccion', 'cargo']) if (resto[k] !== undefined) cambios[k] = typeof resto[k] === 'string' ? resto[k].trim() : resto[k]
       if (Object.keys(cambios).length) ok(await sb.from('perfiles').update(cambios).eq('id', id).select().single())
       invalidar()
       const p = (await perfiles()).porId.get(id)
       if (!p) throw fallo('No encontrado')
       return publico(p)
+    },
+
+    // ---- Dashboard (inicio): resumen con los permisos de cada rol; la plataforma agrega el suyo ----
+    async dashboard_resumen() {
+      const perfil = await yo()
+      const r = ok(await sb.rpc('resumen_dashboard'))
+      if (perfil.plataforma) r.plataforma = ok(await sb.rpc('resumen_plataforma'))
+      return r
     },
 
     // ---- notificaciones ----

@@ -1,41 +1,84 @@
 <script setup>
 import { reactive, ref, computed, watch, onMounted } from 'vue'
-import { Plus, X, KeyRound, Mail } from 'lucide-vue-next'
+import { Plus, KeyRound, Pencil, Phone, MapPin, Mail } from 'lucide-vue-next'
 import { useUsuarios } from '../composables/useUsuarios'
 import { useAuth, ROLES } from '../composables/useAuth'
-import { validarClave } from '../utils'
+import { validarClave, normalizar, generarUsuario } from '../utils'
+import { personaVacia, validarPersona, limpiarPersona } from '../persona'
 import CampoClave from '../components/CampoClave.vue'
 import BarraFiltros from '../components/BarraFiltros.vue'
 import Paginador from '../components/Paginador.vue'
 import Modal from '../components/Modal.vue'
+import FormularioPersona from '../components/FormularioPersona.vue'
+import CredencialesNuevas from '../components/CredencialesNuevas.vue'
 import { usePaginaLocal } from '../composables/usePaginaLocal'
-import { normalizar } from '../utils'
-import { modoSupabase } from '../api'
+import { call } from '../api'
 
 const { usuarios, cargando, error, cargar, crear, actualizar } = useUsuarios()
 const { usuario: yo } = useAuth()
 
-const nuevo = reactive({ usuario: '', nombre: '', rol: 'admin', clave: '', correo: '' })
-const mostrarForm = ref(false)
 const aviso = ref('')
 
+// El servidor ve todos los usuarios de la plataforma: él sugiere el usuario y dice si uno está libre
+const sugerir = (nombre, cedula) => call('usuarios_sugerir', { nombre, cedula })
+const disponible = (usuario) => call('usuarios_disponible', { usuario })
+
+// ---------- Alta: el usuario de ingreso se genera de los nombres completos ----------
+const nuevo = reactive({ ...personaVacia(), rol: 'tecnico' })
+const mostrarForm = ref(false)
+const credenciales = ref(null) // { nombre, usuario, clave } tras crear la cuenta (la clave temporal es la cédula)
+
+function abrirAlta() {
+  Object.assign(nuevo, personaVacia(), { rol: 'tecnico' })
+  aviso.value = ''
+  credenciales.value = null
+  mostrarForm.value = true
+}
+
 async function agregar() {
-  aviso.value = validarClave(nuevo.clave, nuevo.usuario.trim().toLowerCase())
+  aviso.value = validarPersona(nuevo)
   if (aviso.value) return
   try {
-    await crear({ ...nuevo, usuario: nuevo.usuario.trim().toLowerCase() })
-    Object.assign(nuevo, { usuario: '', nombre: '', rol: 'admin', clave: '', correo: '' })
-    mostrarForm.value = false
+    const datos = limpiarPersona(nuevo)
+    const u = await crear({ ...datos, usuario: datos.usuario || generarUsuario(datos.nombre, datos.cedula, usuarios.value.map((x) => x.usuario)), rol: nuevo.rol, clave: datos.cedula })
+    credenciales.value = { nombre: u.nombre, usuario: u.usuario, clave: datos.cedula }
   } catch {
-    /* el error se muestra abajo */
+    /* el error se muestra en el formulario */
+  }
+}
+const cerrarAlta = () => {
+  mostrarForm.value = false
+  credenciales.value = null
+}
+
+// ---------- Edición de los datos de un usuario (el usuario de ingreso no cambia) ----------
+const editando = ref(null)
+const edicion = reactive({ ...personaVacia(), rol: 'tecnico' })
+
+function abrirEdicion(u) {
+  Object.assign(edicion, personaVacia(), { nombre: u.nombre, cedula: u.cedula, correo: u.correo, telefono: u.telefono, ciudad: u.ciudad, direccion: u.direccion, cargo: u.cargo, rol: u.rol })
+  editando.value = u
+  aviso.value = ''
+}
+
+async function guardarEdicion() {
+  aviso.value = validarPersona(edicion)
+  if (aviso.value) return
+  try {
+    await actualizar(editando.value.id, { ...limpiarPersona(edicion), ...(editando.value.id === yo.value.id ? {} : { rol: edicion.rol }) })
+    editando.value = null
+  } catch {
+    /* el error se muestra en el formulario */
   }
 }
 
 const alternar = (u) => actualizar(u.id, { activo: !u.activo }).catch(() => {})
 
-// Restablecer clave: formulario dentro de la tarjeta del usuario (con botón para ver la clave que se escribe)
+// Restablecer clave: si el usuario tiene cédula vuelve a ser su cédula (clave temporal) con un toque; si no la tiene
+// (cuentas antiguas), se escribe una clave temporal dentro de la tarjeta.
 const restableciendoId = ref(null)
 const claveTemporal = ref('')
+const claveRestablecida = ref(null) // { nombre, usuario, clave } para entregar tras restablecer
 
 function abrirRestablecer(u) {
   restableciendoId.value = restableciendoId.value === u.id ? null : u.id
@@ -44,31 +87,17 @@ function abrirRestablecer(u) {
 }
 
 async function restablecer(u) {
-  aviso.value = validarClave(claveTemporal.value, u.usuario)
-  if (aviso.value) return
+  const conCedula = !!u.cedula
+  const clave = conCedula ? u.cedula : claveTemporal.value
+  if (!conCedula) {
+    aviso.value = validarClave(clave, u.usuario)
+    if (aviso.value) return
+  }
   try {
-    await actualizar(u.id, { clave: claveTemporal.value })
+    await actualizar(u.id, { clave, temporal: conCedula })
     restableciendoId.value = null
     claveTemporal.value = ''
-  } catch {
-    /* el error se muestra arriba */
-  }
-}
-
-// Correo para recibir los avisos (opcional). Vacío = solo avisos dentro de la app.
-const editandoCorreoId = ref(null)
-const correoNuevo = ref('')
-
-function abrirCorreo(u) {
-  editandoCorreoId.value = editandoCorreoId.value === u.id ? null : u.id
-  correoNuevo.value = u.correo || ''
-  aviso.value = ''
-}
-
-async function guardarCorreo(u) {
-  try {
-    await actualizar(u.id, { correo: correoNuevo.value.trim() })
-    editandoCorreoId.value = null
+    claveRestablecida.value = { nombre: u.nombre, usuario: u.usuario, clave }
   } catch {
     /* el error se muestra arriba */
   }
@@ -84,7 +113,7 @@ const filtrados = computed(() => {
     (u) =>
       (!rol.value || u.rol === rol.value) &&
       (!estado.value || (estado.value === 'activos') === u.activo) &&
-      (!t || [u.nombre, u.usuario, u.correo].some((c) => normalizar(c).includes(t))),
+      (!t || [u.nombre, u.usuario, u.correo, u.cedula, u.ciudad, u.telefono].some((c) => normalizar(c).includes(t))),
   )
 })
 const pag = usePaginaLocal(filtrados, 10)
@@ -94,7 +123,7 @@ onMounted(() => cargar().catch(() => {}))
 </script>
 
 <template>
-  <BarraFiltros v-model="q" placeholder="Buscar nombre, usuario o correo" :activos="(rol ? 1 : 0) + (estado ? 1 : 0)">
+  <BarraFiltros v-model="q" placeholder="Buscar nombre, usuario, cédula o ciudad" :activos="(rol ? 1 : 0) + (estado ? 1 : 0)">
     <template #filtros>
       <select v-model="rol" class="campo !min-h-10 !py-1.5 text-sm" aria-label="Filtrar por rol">
         <option value="">Todos los roles</option>
@@ -107,54 +136,62 @@ onMounted(() => cargar().catch(() => {}))
       </select>
     </template>
     <template #acciones>
-      <button class="btn-acento !min-h-10 !px-3 flex-none" aria-label="Nuevo usuario" @click="mostrarForm = true">
+      <button class="btn-acento !min-h-10 !px-3 flex-none" aria-label="Nuevo usuario" @click="abrirAlta">
         <Plus :size="18" aria-hidden="true" />
         <span class="sr-only sm:not-sr-only">Nuevo</span>
       </button>
     </template>
   </BarraFiltros>
 
-  <p v-if="error || aviso" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso || error }}</p>
+  <p v-if="(error || aviso) && !mostrarForm && !editando" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso || error }}</p>
 
-  <Modal v-if="mostrarForm" titulo="Nuevo usuario" @cerrar="mostrarForm = false">
-  <p v-if="error || aviso" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso || error }}</p>
-  <form class="grid gap-3" @submit.prevent="agregar">
-    <label class="etiqueta">Usuario
-      <input v-model="nuevo.usuario" class="campo" required autocapitalize="none" pattern="[a-z0-9._\-]{3,30}" title="3 a 30 caracteres: letras minúsculas, números, punto, guion o guion bajo" />
-    </label>
-    <label class="etiqueta">Nombre
-      <input v-model.trim="nuevo.nombre" class="campo" required />
-    </label>
-    <label class="etiqueta">{{ modoSupabase ? 'Correo (lo usará para iniciar sesión)' : 'Correo para avisos (opcional)' }}
-      <input v-model.trim="nuevo.correo" type="email" class="campo" autocomplete="off" autocapitalize="none" :required="modoSupabase" />
-    </label>
-    <label class="etiqueta">Rol
-      <select v-model="nuevo.rol" class="campo">
-        <option v-for="r in ROLES" :key="r">{{ r }}</option>
-      </select>
-    </label>
-    <label class="etiqueta">Clave temporal (mínimo 10 caracteres, con letras y números)
-      <CampoClave v-model="nuevo.clave" autocomplete="new-password" required minlength="10" />
-    </label>
-    <p class="text-xs text-brand-700/80">El usuario deberá cambiarla en su primer ingreso.</p>
-    <button class="btn" :disabled="cargando">Crear usuario</button>
-  </form>
+  <!-- Alta de usuario (modal) -->
+  <Modal v-if="mostrarForm" :titulo="credenciales ? 'Usuario creado' : 'Nuevo usuario'" @cerrar="cerrarAlta">
+    <CredencialesNuevas v-if="credenciales" v-bind="credenciales" @listo="cerrarAlta" />
+    <form v-else class="grid gap-3" @submit.prevent="agregar">
+      <FormularioPersona :form="nuevo" :roles="ROLES" nueva-cuenta :usuarios-existentes="usuarios.map((u) => u.usuario)" :sugerir="sugerir" :disponible="disponible" />
+      <p v-if="aviso || error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso || error }}</p>
+      <button class="btn" :disabled="cargando">{{ cargando ? 'Creando…' : 'Crear usuario' }}</button>
+    </form>
+  </Modal>
+
+  <!-- Clave restablecida: se entrega al usuario (modal) -->
+  <Modal v-if="claveRestablecida" titulo="Clave restablecida" @cerrar="claveRestablecida = null">
+    <CredencialesNuevas accion="Clave restablecida" v-bind="claveRestablecida" @listo="claveRestablecida = null" />
+  </Modal>
+
+  <!-- Edición de datos (modal) -->
+  <Modal v-if="editando" :titulo="`Datos de @${editando.usuario}`" @cerrar="editando = null">
+    <form class="grid gap-3" @submit.prevent="guardarEdicion">
+      <FormularioPersona :form="edicion" :roles="editando.id === yo.id ? null : ROLES" editando />
+      <p class="text-xs text-brand-700/80">El usuario de ingreso (@{{ editando.usuario }}) no cambia aunque se modifique el nombre.</p>
+      <p v-if="aviso || error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso || error }}</p>
+      <div class="flex gap-2">
+        <button type="button" class="btn-borde min-h-11" @click="editando = null">Cancelar</button>
+        <button class="btn min-h-11" :disabled="cargando">Guardar</button>
+      </div>
+    </form>
   </Modal>
 
   <ul class="grid gap-2.5">
     <li v-for="u in pag.visibles.value" :key="u.id" class="tarjeta grid gap-2" :class="{ 'opacity-60': !u.activo }">
       <div class="flex items-start justify-between gap-2">
-        <div>
+        <div class="min-w-0">
           <strong class="text-brand-900">{{ u.nombre }}</strong>
-          <p class="text-sm text-brand-700">@{{ u.usuario }}</p>
-          <p v-if="u.correo" class="text-xs text-brand-700/70">{{ u.correo }}</p>
+          <p class="text-sm text-brand-700">@{{ u.usuario }}<template v-if="u.cargo"> · {{ u.cargo }}</template></p>
+          <p v-if="u.cedula || u.ciudad" class="text-xs text-brand-700/70">
+            <template v-if="u.cedula">C.I. {{ u.cedula }}</template><template v-if="u.cedula && u.ciudad"> · </template><template v-if="u.ciudad">{{ u.ciudad }}</template>
+          </p>
+          <p v-if="u.telefono" class="flex items-center gap-1 text-xs text-brand-700/70"><Phone :size="12" class="shrink-0" aria-hidden="true" />{{ u.telefono }}</p>
+          <p v-if="u.correo" class="flex items-center gap-1 text-xs break-all text-brand-700/70"><Mail :size="12" class="shrink-0" aria-hidden="true" />{{ u.correo }}</p>
+          <p v-if="u.direccion" class="flex items-center gap-1 text-xs text-brand-700/70"><MapPin :size="12" class="shrink-0" aria-hidden="true" />{{ u.direccion }}</p>
         </div>
-        <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold" :class="u.rol === 'superadmin' ? 'bg-acento text-acento-texto' : 'bg-brand-100 text-brand-800'">{{ u.rol }}</span>
+        <span class="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold" :class="u.rol === 'superadmin' ? 'bg-acento text-acento-texto' : 'bg-brand-100 text-brand-800'">{{ u.rol }}</span>
       </div>
       <div class="flex flex-wrap gap-2">
-        <button class="btn-borde min-h-10 text-sm" :aria-expanded="editandoCorreoId === u.id" @click="abrirCorreo(u)">
-          <Mail :size="16" aria-hidden="true" />
-          Correo
+        <button class="btn-borde min-h-10 text-sm" @click="abrirEdicion(u)">
+          <Pencil :size="16" aria-hidden="true" />
+          Editar datos
         </button>
         <button v-if="u.id !== yo.id" class="btn-borde min-h-10 text-sm" :aria-expanded="restableciendoId === u.id" @click="abrirRestablecer(u)">
           <KeyRound :size="16" aria-hidden="true" />
@@ -165,26 +202,27 @@ onMounted(() => cargar().catch(() => {}))
         </button>
       </div>
 
-      <form v-if="editandoCorreoId === u.id" class="grid gap-2 rounded-xl bg-brand-50 p-3" @submit.prevent="guardarCorreo(u)">
-        <label class="etiqueta">Correo para avisos (déjalo vacío para no enviar correos)
-          <input v-model.trim="correoNuevo" type="email" class="campo" autocomplete="off" autocapitalize="none" />
-        </label>
-        <div class="flex gap-2">
-          <button type="button" class="btn-borde min-h-11" @click="editandoCorreoId = null">Cancelar</button>
-          <button class="btn min-h-11" :disabled="cargando">Guardar</button>
-        </div>
-      </form>
-
-      <form v-if="restableciendoId === u.id" class="grid gap-2 rounded-xl bg-brand-50 p-3" @submit.prevent="restablecer(u)">
-        <label class="etiqueta">Clave temporal (mínimo 10 caracteres, con letras y números)
-          <CampoClave v-model="claveTemporal" autocomplete="new-password" required minlength="10" />
-        </label>
-        <p class="text-xs text-brand-700/80">Deberá cambiarla al ingresar y se cerrarán sus sesiones abiertas.</p>
-        <div class="flex gap-2">
-          <button type="button" class="btn-borde min-h-11" @click="restableciendoId = null">Cancelar</button>
-          <button class="btn min-h-11" :disabled="cargando">Guardar</button>
-        </div>
-      </form>
+      <div v-if="restableciendoId === u.id" class="grid gap-2 rounded-xl bg-brand-50 p-3">
+        <template v-if="u.cedula">
+          <p class="text-sm text-brand-800">La clave volverá a ser su número de cédula (<b class="font-mono">{{ u.cedula }}</b>). Deberá cambiarla al ingresar y se cerrarán sus sesiones abiertas.</p>
+          <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+          <div class="flex gap-2">
+            <button type="button" class="btn-borde min-h-11" @click="restableciendoId = null">Cancelar</button>
+            <button class="btn min-h-11" :disabled="cargando" @click="restablecer(u)">Restablecer a la cédula</button>
+          </div>
+        </template>
+        <form v-else class="grid gap-2" @submit.prevent="restablecer(u)">
+          <label class="etiqueta">Este usuario no tiene cédula: escribe una clave temporal (mínimo 10 caracteres, con letras y números)
+            <CampoClave v-model="claveTemporal" autocomplete="new-password" required minlength="10" />
+          </label>
+          <p class="text-xs text-brand-700/80">Deberá cambiarla al ingresar y se cerrarán sus sesiones abiertas. Agrégale la cédula desde "Editar datos" para usarla como clave temporal.</p>
+          <p v-if="aviso" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso }}</p>
+          <div class="flex gap-2">
+            <button type="button" class="btn-borde min-h-11" @click="restableciendoId = null">Cancelar</button>
+            <button class="btn min-h-11" :disabled="cargando">Guardar</button>
+          </div>
+        </form>
+      </div>
     </li>
   </ul>
 

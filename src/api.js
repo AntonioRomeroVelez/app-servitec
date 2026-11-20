@@ -1,5 +1,6 @@
 // Capa de transporte: Google Apps Script (producción) o localStorage (modo demo, sin VITE_SCRIPT_URL).
-import { validarClave, normalizar } from './utils'
+import { validarClave, normalizar, generarUsuario, usuarioValido, hoy as hoyIso, haceDias } from './utils'
+import { validarPersona, limpiarPersona } from './persona'
 import { combinar } from './configuracion'
 import { valorSeccion, SECCIONES } from './validarConfig'
 import { crearCapaOffline } from './offline/capa.js'
@@ -305,6 +306,35 @@ async function demo(action, p, token) {
     return true
   }
 
+  // Resumen del inicio (mismas cifras que resumen_dashboard de la base), con los permisos de cada rol
+  if (action === 'dashboard_resumen') {
+    const h = hoyIso()
+    const mesIni = `${h.slice(0, 7)}-01`
+    const visitas = leer(RECURSOS.visitas, [])
+    const propias = yo.rol === 'admin' ? visitas.filter((v) => v.autor === yo.usuario).map((v) => v.id) : []
+    const vv = visitas.filter((v) => puedeVer('visitas', v, yo, propias))
+    const ii = leer(RECURSOS.informes, []).filter((i) => puedeVer('informes', i, yo, propias))
+    const n = (lista, f) => lista.filter(f).length
+    const desde = haceDias(6)
+    const hasta = haceDias(-7)
+    const porDia = Array.from({ length: 14 }, (_, k) => {
+      const fecha = haceDias(6 - k)
+      return { fecha, total: n(vv, (v) => v.fecha === fecha && v.estado !== 'Cancelada') }
+    })
+    return {
+      hoy: h, visitasHoy: n(vv, (v) => v.fecha === h && v.estado !== 'Cancelada'), proximas: n(vv, (v) => v.fecha > h && ['Programada', 'Aceptada'].includes(v.estado)),
+      porAceptar: n(vv, (v) => v.estado === 'Programada' && v.fecha >= h), enCurso: n(vv, (v) => v.estado === 'En curso'),
+      realizadasMes: n(vv, (v) => v.estado === 'Realizada' && v.fecha >= mesIni),
+      atrasadas: n(vv, (v) => v.fecha < h && ['Programada', 'Aceptada', 'En curso'].includes(v.estado)),
+      informesBorrador: n(ii, (i) => i.estado === 'Borrador'), informesFinalizadosMes: n(ii, (i) => i.estado === 'Finalizado' && i.fecha >= mesIni),
+      clientes: yo.rol === 'tecnico' ? 0 : leer(LS_C, []).length, tecnicos: n(us, (u) => u.rol === 'tecnico' && u.activo),
+      porDia: porDia.filter((d) => d.fecha >= desde && d.fecha <= hasta),
+      proximasLista: vv.filter((v) => v.fecha >= h && ['Programada', 'Aceptada', 'En curso'].includes(v.estado)).sort((a, b) => `${a.fecha} ${a.hora}`.localeCompare(`${b.fecha} ${b.hora}`)).slice(0, 5)
+        .map(({ id, fecha, hora, cliente, tipo, estado }) => ({ id, fecha, hora, cliente, tipo, estado })),
+      ultimosInformes: [...ii].sort((a, b) => String(b.creado).localeCompare(String(a.creado))).slice(0, 5).map(({ id, numero, titulo, cliente, estado, fecha }) => ({ id, numero, titulo, cliente, estado, fecha })),
+    }
+  }
+
   if (action.startsWith('clientes_')) {
     if (yo.rol === 'tecnico') throw error('Sin permisos', 'FORBIDDEN')
     const cs = leer(LS_C, [])
@@ -467,27 +497,38 @@ async function demo(action, p, token) {
   switch (action) {
     case 'configuracion_update':
       return guardarConfigDemo(p.seccion, p)
+    case 'usuarios_sugerir': {
+      const u = generarUsuario(p.nombre, p.cedula, us.map((x) => x.usuario))
+      if (!u) throw error('Escribe los nombres completos y la cédula')
+      return u
+    }
+    case 'usuarios_disponible':
+      return usuarioValido(String(p.usuario || '').toLowerCase()) && !us.some((x) => x.usuario === String(p.usuario).toLowerCase())
     case 'usuarios_list':
       return us.map(publico)
     case 'usuarios_create': {
       const d = p.data
-      if (!/^[a-z0-9._-]{3,30}$/.test(d.usuario)) throw error('Usuario inválido: 3 a 30 caracteres (letras minúsculas, números, . _ -)')
-      const msgClave = validarClave(d.clave, d.usuario)
-      if (msgClave) throw error(msgClave)
-      if (us.some((x) => x.usuario === d.usuario)) throw error('Ese usuario ya existe')
-      const nuevo = { id: crypto.randomUUID(), usuario: d.usuario, nombre: d.nombre, rol: d.rol, clave: d.clave, activo: true, cambiarClave: true, correo: (d.correo || '').trim() }
+      if (!['superadmin', 'admin', 'tecnico'].includes(d.rol)) throw error('Elige el rol del usuario')
+      const msg = validarPersona(d)
+      if (msg) throw error(msg)
+      const datos = limpiarPersona(d)
+      if (us.some((x) => x.cedula && x.cedula === datos.cedula)) throw error('Ya existe un usuario con esa cédula')
+      const usuario = datos.usuario || generarUsuario(datos.nombre, datos.cedula, us.map((x) => x.usuario))
+      if (!usuarioValido(usuario)) throw error('Usuario inválido: de 3 a 30 caracteres (letras minúsculas, números, punto, guion o guion bajo)')
+      if (us.some((x) => x.usuario === usuario)) throw error('Ese usuario ya está en uso')
+      const nuevo = { id: crypto.randomUUID(), ...datos, usuario, rol: d.rol, clave: datos.cedula, activo: true, cambiarClave: true } // la clave temporal es la cédula
       escribir(LS_U, [...us, nuevo])
       return publico(nuevo)
     }
     case 'usuarios_update': {
       const i = us.findIndex((x) => x.id === p.id)
       if (i < 0) throw error('No encontrado')
-      const { clave, ...resto } = p.data
+      const { clave, temporal, ...resto } = p.data
       const rol = resto.rol ?? us[i].rol
       const activo = resto.activo ?? us[i].activo
       if (p.id === yo.id && (!activo || rol !== 'superadmin')) throw error('No puedes quitarte tu propio acceso')
       if (clave) {
-        const msgClave = validarClave(clave, us[i].usuario)
+        const msgClave = temporal ? '' : validarClave(clave, us[i].usuario)
         if (msgClave) throw error(msgClave)
         limpiarFallos(us[i].usuario)
       }

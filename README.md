@@ -188,7 +188,7 @@ Son 98 pruebas: login, bloqueo y cambio obligatorio de clave, permisos por rol, 
 - **Checklist por tipo de visita** (`src/plantillas.js`): cada ítem se marca Cumple / Falla / N/A; una falla exige observación. Se guarda como JSON en la columna `checklist`.
 - **Firma del cliente** (dibujada en pantalla, PNG pequeño) y nombre de quien recibe.
 - **Finalizado = cerrado:** para finalizar hay que responder todo el checklist. Después solo el superadmin puede editarlo o eliminarlo (se valida en `Code.gs`).
-- **PDF:** el botón "Descargar PDF" arma una vista de impresión A4 con encabezado Ferisel, checklist, observaciones, fotos de la visita a 1600 px y firma, y abre el diálogo de impresión del navegador (elegir "Guardar como PDF").
+- **PDF:** el botón "Descargar PDF" genera y descarga un archivo A4 (`INF-0001.pdf`) con el logo y los datos de la empresa como encabezado, checklist, observaciones, fotos de la visita, firma del cliente y pie con numeración de páginas. Lo que incluye se elige en Ajustes > Informes.
 
 ## Fotos de las visitas
 

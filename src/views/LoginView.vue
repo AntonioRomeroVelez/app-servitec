@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useAuth } from '../composables/useAuth'
-import { modoDemo, modoSupabase } from '../api'
+import { modoDemo } from '../api'
 import CampoClave from '../components/CampoClave.vue'
 import MarcaEmpresa from '../components/MarcaEmpresa.vue'
 import { APP } from '../app'
@@ -32,8 +32,8 @@ async function entrar() {
 
       <form class="tarjeta grid gap-4 p-5" @submit.prevent="entrar">
         <h1 class="text-lg font-bold text-brand-900">Iniciar sesión</h1>
-        <label class="etiqueta">{{ modoSupabase ? 'Correo' : 'Usuario' }}
-          <input v-model="usuario" class="campo" :type="modoSupabase ? 'email' : 'text'" autocomplete="username" autocapitalize="none" required />
+        <label class="etiqueta">Usuario
+          <input v-model="usuario" class="campo" type="text" autocomplete="username" autocapitalize="none" required />
         </label>
         <label class="etiqueta">Clave
           <CampoClave v-model="clave" autocomplete="current-password" required />

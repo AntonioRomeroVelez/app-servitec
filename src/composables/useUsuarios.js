@@ -25,12 +25,14 @@ export function useUsuarios() {
     run(async () => {
       const u = await call('usuarios_create', { data })
       usuarios.value = [...usuarios.value, u]
+      return u // trae el usuario generado
     })
 
   const actualizar = (id, data) =>
     run(async () => {
       const u = await call('usuarios_update', { id, data })
       usuarios.value = usuarios.value.map((x) => (x.id === id ? u : x))
+      return u
     })
 
   return { usuarios: readonly(usuarios), cargando: readonly(cargando), error: readonly(error), cargar, crear, actualizar }

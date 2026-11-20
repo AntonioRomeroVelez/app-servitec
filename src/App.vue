@@ -10,6 +10,7 @@ import { useConfiguracion } from './composables/useConfiguracion'
 import { modoDemo, call, offline, iniciarSincronizacion } from './api'
 import { paramsAgenda } from './filtrosAgenda'
 import LoginView from './views/LoginView.vue'
+import DashboardView from './views/DashboardView.vue'
 import AgendaView from './views/AgendaView.vue'
 import FormVisita from './views/FormVisita.vue'
 import DetalleVisita from './views/DetalleVisita.vue'
@@ -30,7 +31,7 @@ import { useInstalacion } from './composables/useInstalacion'
 import BarraConexion from './components/BarraConexion.vue'
 import ToastContenedor from './components/ToastContenedor.vue'
 import { useToast } from './composables/useToast'
-import { ArrowLeft, Bell, Building2, CalendarDays, FileText, Menu, Plus, QrCode, Settings, ShieldCheck, Smartphone, UserRound } from 'lucide-vue-next'
+import { ArrowLeft, Bell, Building2, CalendarDays, FileText, LayoutDashboard, Menu, Plus, QrCode, Settings, ShieldCheck, Smartphone, UserRound } from 'lucide-vue-next'
 import MenuLateral from './components/MenuLateral.vue'
 import { estado as estadoRed } from './offline/estado'
 
@@ -52,10 +53,10 @@ function seguirDeInstalacion() {
 }
 CFG.cargar() // marca de la empresa: pública, se pide también antes de iniciar sesión
 
-// Vistas: agenda | visita-detalle | visita-editar
+// Vistas: dashboard (inicio) | agenda | visita-detalle | visita-editar
 //         informes | informe-detalle | informe-editar | usuarios
 // Crear visita o informe no es una vista: abre un modal (ver `modal`)
-const vista = ref('agenda')
+const vista = ref('dashboard') // el inicio de la app es el Dashboard
 const seleccionadoId = ref(null)
 const visitaOrigen = ref(null) // visita desde la que se crea un informe
 
@@ -69,6 +70,7 @@ const prefill = computed(() => {
 })
 
 const TITULOS = {
+  dashboard: 'Inicio',
   agenda: 'Agenda de visitas',
   'visita-detalle': 'Visita',
   'visita-editar': 'Editar visita',
@@ -85,7 +87,7 @@ const TITULOS = {
   instalar: 'Instalar la app',
   qr: 'Código QR de instalación',
 }
-const esPrincipal = computed(() => ['agenda', 'informes', 'clientes', 'usuarios', 'empresas', 'ajustes', 'instalar', 'qr'].includes(vista.value))
+const esPrincipal = computed(() => ['dashboard', 'agenda', 'informes', 'clientes', 'usuarios', 'empresas', 'ajustes', 'instalar', 'qr'].includes(vista.value))
 const error = computed(() => V.error.value || I.error.value)
 watch(error, (e) => e && vista.value !== 'usuarios' && toast.error(e))
 const cargando = computed(() => V.cargando.value || I.cargando.value)
@@ -98,6 +100,17 @@ function ir(v, id = null) {
   vista.value = v
   seleccionadoId.value = id
   window.scrollTo(0, 0)
+}
+
+// Desde el Dashboard: abrir la agenda o los informes ya filtrados (los parámetros se fijan antes de mostrar la lista)
+function irAgenda(periodo) {
+  V.cargar(paramsAgenda(periodo)).catch(() => {})
+  ir('agenda')
+}
+
+function irInformes(estado) {
+  I.cargar(estado ? { estado } : {}).catch(() => {})
+  ir('informes')
 }
 
 // Detalle de visita: muestra la visita ya cargada y pide al servidor sus informes (el listado general está paginado)
@@ -152,7 +165,7 @@ function volver() {
     case 'informe-detalle':
       return ir('informes')
     default:
-      return ir('agenda')
+      return ir('dashboard')
   }
 }
 
@@ -266,7 +279,7 @@ watch(
   () => logueado.value && !usuario.value?.cambiarClave, // con clave temporal el backend no entrega datos: se carga tras cambiarla
   (si) => {
     if (si) {
-      ir('agenda')
+      ir('dashboard')
       recargar()
       N.iniciar()
       CFG.cargar()
@@ -306,6 +319,7 @@ const arbol = computed(() => {
   const sinEnviar = estadoRed.pendientes + estadoRed.fallidas
 
   return [
+    hoja('dashboard', 'Inicio', ['dashboard'], { icono: LayoutDashboard }),
     grupo('visitas', puedeAgendar.value ? 'Visitas' : 'Mis visitas', CalendarDays, [
       hoja('agenda', 'Agenda', ['agenda', 'visita-detalle', 'visita-editar']),
       puedeAgendar.value && hoja('visita-nueva', 'Nueva visita', ['visita-nueva']),
@@ -413,7 +427,18 @@ function salirDelMenu() {
 
     <main class="mx-auto max-w-3xl px-4 pt-3 pb-24 print:max-w-none print:p-0">
       <!-- Agenda -->
-      <AgendaView v-if="vista === 'agenda'" :visitas="V.items.value" :cargando="cargando" :mostrar-autor="esSuper" :nombre-de="T.nombreDe" :total="V.meta.value.total" :offset="V.parametros.value.offset || 0" :limite="V.limite" :filtros="V.parametros.value" @abrir="(id) => abrirVisita(id)" @refrescar="recargar" @buscar="(p) => V.cargar(p).catch(() => {})" @pagina="(o) => V.irAPagina(o).catch(() => {})" />
+      <DashboardView
+        v-if="vista === 'dashboard'"
+        :key="claveRefresco"
+        @agenda="irAgenda"
+        @informes="irInformes"
+        @ir="(v) => ir(v)"
+        @visita="(id) => abrirVisita(id)"
+        @informe="(id) => abrirInforme('informe-detalle', id)"
+        @nueva-visita="nuevaVisita"
+        @nuevo-informe="nuevoInforme"
+      />
+      <AgendaView v-else-if="vista === 'agenda'" :visitas="V.items.value" :cargando="cargando" :mostrar-autor="esSuper" :nombre-de="T.nombreDe" :total="V.meta.value.total" :offset="V.parametros.value.offset || 0" :limite="V.limite" :filtros="V.parametros.value" @abrir="(id) => abrirVisita(id)" @refrescar="recargar" @buscar="(p) => V.cargar(p).catch(() => {})" @pagina="(o) => V.irAPagina(o).catch(() => {})" />
       <FormVisita v-else-if="vista === 'visita-editar' && visita && puedeAgendar" :tecnicos="T.tecnicos.value" :inicial="visita" :cargando="cargando" @guardar="guardarVisita" @cancelar="abrirVisita(seleccionadoId)" />
       <DetalleVisita
         v-else-if="vista === 'visita-detalle' && visita"
@@ -452,9 +477,9 @@ function salirDelMenu() {
       <PendientesView v-else-if="vista === 'pendientes'" />
       <ClientesView v-else-if="vista === 'clientes' && puedeAgendar" :solicitud="solicitudClientes" @agendar="agendarParaCliente" @abrir-visita="abrirVisita" />
       <ConfiguracionView v-else-if="vista === 'ajustes' && esSuper" :solicitud="solicitudAjustes" />
-      <InstalarView v-else-if="vista === 'instalar'" @continuar="ir('agenda')" />
+      <InstalarView v-else-if="vista === 'instalar'" @continuar="ir('dashboard')" />
       <QrInstalarView v-else-if="vista === 'qr' && puedeAgendar" />
-      <ClaveView v-else-if="vista === 'clave'" @listo="ir('agenda')" />
+      <ClaveView v-else-if="vista === 'clave'" @listo="ir('dashboard')" />
       <UsuariosView v-else-if="vista === 'usuarios' && esSuper" />
       <EmpresasView v-else-if="vista === 'empresas' && esPlataforma" />
     </main>

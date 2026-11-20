@@ -108,3 +108,28 @@ export async function procesarLogo(file, { maxLado = 480, maxCaracteres = 40000 
   }
   throw new Error('No se pudo reducir el logo lo suficiente. Prueba con una imagen más simple o más pequeña.')
 }
+
+/**
+ * Mide una imagen (data URL) para el PDF: devuelve { data, formato, ancho, alto }. Las WebP (o con aPng) se pasan a PNG
+ * porque el PDF no las admite; el PNG conserva la transparencia de los logos.
+ */
+export function medirImagen(dataUrl, { aPng = false } = {}) {
+  return new Promise((res, rej) => {
+    const img = new Image()
+    img.onload = () => {
+      let data = dataUrl
+      let formato = /^data:image\/png/.test(dataUrl) ? 'PNG' : 'JPEG'
+      if (aPng || /^data:image\/webp/.test(dataUrl)) {
+        const canvas = document.createElement('canvas')
+        canvas.width = img.naturalWidth
+        canvas.height = img.naturalHeight
+        canvas.getContext('2d').drawImage(img, 0, 0)
+        data = canvas.toDataURL('image/png')
+        formato = 'PNG'
+      }
+      res({ data, formato, ancho: img.naturalWidth, alto: img.naturalHeight })
+    }
+    img.onerror = () => rej(new Error('No se pudo leer una imagen del informe'))
+    img.src = dataUrl
+  })
+}

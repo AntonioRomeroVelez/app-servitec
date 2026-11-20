@@ -3,8 +3,10 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { Building2, Pencil, Plus, Power, X } from 'lucide-vue-next'
 import { call } from '../api'
 import { useToast } from '../composables/useToast'
-import { validarClave, normalizar } from '../utils'
-import CampoClave from '../components/CampoClave.vue'
+import { normalizar } from '../utils'
+import { personaVacia, validarPersona, limpiarPersona } from '../persona'
+import FormularioPersona from '../components/FormularioPersona.vue'
+import CredencialesNuevas from '../components/CredencialesNuevas.vue'
 import BarraFiltros from '../components/BarraFiltros.vue'
 import Paginador from '../components/Paginador.vue'
 import Modal from '../components/Modal.vue'
@@ -19,8 +21,13 @@ const guardando = ref(false)
 const error = ref('')
 
 const PLANES = ['prueba', 'basico', 'pro']
-const vacia = () => ({ nombre: '', subtitulo: '', ruc: '', direccion: '', telefono: '', correo: '', web: '', plan: 'prueba', admin: { usuario: '', nombre: '', correo: '', clave: '' } })
+const vacia = () => ({ nombre: '', subtitulo: '', ruc: '', direccion: '', telefono: '', correo: '', web: '', plan: 'prueba', admin: personaVacia() })
 const form = reactive(vacia())
+const credenciales = ref(null) // { nombre, usuario, clave } del administrador recién creado
+// El servidor sugiere el usuario del administrador y dice si uno está libre (ve todos los usuarios de la plataforma)
+const sugerir = (nombre, cedula) => call('usuarios_sugerir', { nombre, cedula })
+const disponible = (usuario) => call('usuarios_disponible', { usuario })
+
 const editando = ref(null) // null = cerrado, 'nueva' = alta, o el id de la empresa que se edita
 
 async function cargar() {
@@ -56,22 +63,29 @@ function abrir(e) {
   Object.assign(form, vacia())
   if (e) Object.assign(form, { nombre: e.nombre, plan: e.plan, ...Object.fromEntries(['subtitulo', 'ruc', 'direccion', 'telefono', 'correo', 'web'].map((k) => [k, e.datos?.[k] ?? ''])) })
   editando.value = e ? e.id : 'nueva'
+  credenciales.value = null
   error.value = ''
 }
-const cerrar = () => (editando.value = null)
+const cerrar = () => {
+  editando.value = null
+  credenciales.value = null
+}
 
 async function guardar() {
   error.value = ''
   if (editando.value === 'nueva') {
-    const msg = validarClave(form.admin.clave, form.admin.usuario.trim().toLowerCase())
+    const msg = validarPersona(form.admin)
     if (msg) return (error.value = msg)
   }
   guardando.value = true
   try {
     const { admin, plan, nombre, ...datos } = form
     if (editando.value === 'nueva') {
-      await call('empresas_create', { data: { ...form, admin: { ...admin, usuario: admin.usuario.trim().toLowerCase() } } })
-      toast.exito(`Empresa "${nombre}" creada. Su administrador debe cambiar la clave al entrar.`)
+      const r = await call('empresas_create', { data: { ...form, admin: limpiarPersona(admin) } })
+      credenciales.value = { nombre: admin.nombre.trim(), usuario: r.usuario, clave: admin.cedula.trim() } // la clave temporal es la cédula
+      toast.exito(`Empresa "${nombre}" creada.`)
+      await cargar()
+      return // el modal queda abierto mostrando el usuario generado y la clave temporal
     } else {
       await call('empresas_update', { id: editando.value, data: { nombre, plan, datos } })
       toast.exito('Datos de la empresa guardados.')
@@ -119,8 +133,9 @@ async function alternar(e) {
 
   <p v-if="error && !editando" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
-  <Modal v-if="editando" :titulo="editando === 'nueva' ? 'Nueva empresa' : 'Datos de la empresa'" @cerrar="cerrar">
-  <form class="grid gap-3" @submit.prevent="guardar">
+  <Modal v-if="editando" :titulo="credenciales ? 'Empresa creada' : editando === 'nueva' ? 'Nueva empresa' : 'Datos de la empresa'" @cerrar="cerrar">
+  <CredencialesNuevas v-if="credenciales" v-bind="credenciales" @listo="cerrar" />
+  <form v-else class="grid gap-3" @submit.prevent="guardar">
     <label class="etiqueta">Nombre de la empresa
       <input v-model.trim="form.nombre" class="campo" required />
     </label>
@@ -154,18 +169,7 @@ async function alternar(e) {
 
     <template v-if="editando === 'nueva'">
       <h3 class="mt-1 text-sm font-bold text-brand-800">Administrador de la empresa (superadmin)</h3>
-      <label class="etiqueta">Nombre
-        <input v-model.trim="form.admin.nombre" class="campo" required autocomplete="off" />
-      </label>
-      <label class="etiqueta">Usuario
-        <input v-model="form.admin.usuario" class="campo" required autocapitalize="none" autocomplete="off" pattern="[a-z0-9._\-]{3,30}" title="3 a 30 caracteres: letras minúsculas, números, punto, guion o guion bajo" />
-      </label>
-      <label class="etiqueta">Correo (con él iniciará sesión)
-        <input v-model.trim="form.admin.correo" class="campo" type="email" required autocapitalize="none" autocomplete="off" />
-      </label>
-      <label class="etiqueta">Clave temporal (mínimo 10 caracteres, con letras y números)
-        <CampoClave v-model="form.admin.clave" autocomplete="new-password" required />
-      </label>
+      <FormularioPersona :form="form.admin" nueva-cuenta :sugerir="sugerir" :disponible="disponible" />
     </template>
 
     <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>

@@ -14,7 +14,7 @@ if (!usuario || !correo || !empresa || !clave) {
 }
 try {
   crearSuperadmin({ usuario, correo, empresa, nombre, clave, plataforma })
-  console.log(`Superadmin "${usuario}"${plataforma ? ' (plataforma)' : ''} creado en la empresa "${empresa}". Inicia sesión con el correo ${correo.toLowerCase()}.`)
+  console.log(`Superadmin "${usuario}"${plataforma ? ' (plataforma)' : ''} creado en la empresa "${empresa}". Inicia sesión con el usuario ${usuario.toLowerCase()}.`)
 } catch (e) {
   console.error(e.message)
   process.exit(1)

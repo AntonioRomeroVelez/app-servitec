@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { crearTransporte } from '../../src/supabase/transporte.js'
-import { prepararPlataforma, crearEmpresaConAdmin } from './ayudas.mjs'
+import { prepararPlataforma, crearEmpresaConAdmin, crearUsuario, persona, cedulaDe } from './ayudas.mjs'
 
 const env = Object.fromEntries(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '.env'), 'utf8').split('\n').filter(Boolean).map((l) => l.split(/=(.*)/s).slice(0, 2)))
 const memoria = () => {
@@ -31,47 +31,58 @@ const claveA = 'ClaveSegura123'
 
 // --- la plataforma crea dos empresas (no hay registro abierto) y sus administradores entran
 await prepararPlataforma(P, sufijo)
-const ea = await crearEmpresaConAdmin(P, A, { empresa: 'Empresa A', usuario: 'ana', nombre: 'Ana Admin', correo: `ana${sufijo}@a.com`, clave: claveA, datos: { ruc: '1790000000001', telefono: '022222222', subtitulo: 'Seguridad' } })
+const ea = await crearEmpresaConAdmin(P, A, { empresa: 'Empresa A', nombre: 'Ana Admin Pérez', clave: claveA, datos: { ruc: '1790000000001', telefono: '022222222', subtitulo: 'Seguridad' } })
 ok(ea.sesion.usuario.rol === 'superadmin' && ea.sesion.token && ea.sesion.usuario.plataforma === false, 'empresas_create crea la empresa y su administrador (superadmin de esa empresa)')
-const eb = await crearEmpresaConAdmin(P, B, { empresa: 'Empresa B', usuario: 'beto', nombre: 'Beto', correo: `beto${sufijo}@b.com`, clave: claveA })
+ok(/^ana\d{4}[a-z]*\d*$/.test(ea.usuario), `el usuario sugerido es primer nombre + 4 dígitos de la cédula: ${ea.usuario}`)
+ok(ea.sesion.usuario.cedula && ea.sesion.usuario.telefono === '0991234567' && ea.sesion.usuario.ciudad === 'Quito' && ea.sesion.usuario.correo.endsWith('@prueba.test'), 'el administrador guarda cédula, teléfono, ciudad y correo de contacto')
+const eb = await crearEmpresaConAdmin(P, B, { empresa: 'Empresa B', nombre: 'Beto Benítez Ríos', clave: claveA })
 ok((await A.call('configuracion_get')).empresa.nombre === 'Empresa A' && (await A.call('configuracion_get')).empresa.ruc === '1790000000001', 'los datos de la empresa quedaron en su configuración')
 await rechaza(() => A.call('empresas_list'), 'el administrador de una empresa no gestiona empresas', /permisos/)
 await rechaza(() => A.cliente.rpc('registrar_empresa', { p_empresa: 'X', p_nombre: 'x', p_usuario: 'xxx' }).then(({ error }) => { if (error) throw new Error(error.message) }), 'el registro abierto está cerrado', /permission|permiso/i)
 const empresasLista = await P.call('empresas_list')
 ok([ea.id, eb.id].every((id) => empresasLista.some((e) => e.id === id)) && empresasLista.find((e) => e.id === ea.id).usuarios === 1, 'empresas_list muestra las empresas y su número de usuarios')
-await rechaza(() => P.call('empresas_create', { data: { nombre: 'Sin admin', admin: { usuario: 'zz', nombre: 'Z', correo: 'z@z.com', clave: 'ClaveSegura123' } } }), 'usuario del administrador inválido', /inválido/)
-await rechaza(() => P.call('empresas_create', { data: { nombre: 'Repetida', admin: { usuario: 'ana', nombre: 'Otra', correo: `ana${sufijo}@a.com`, clave: 'ClaveSegura123' } } }), 'correo ya registrado', /ya está registrado/)
+const adminMal = (extra) => P.call('empresas_create', { data: { nombre: 'Mal', admin: { ...persona('Persona Prueba Uno'), clave: 'ClaveSegura123', ...extra } } })
+await rechaza(() => adminMal({ nombre: 'Solo' }), 'los nombres completos son obligatorios', /nombres completos/)
+await rechaza(() => adminMal({ cedula: '1710034066' }), 'cédula con dígito verificador incorrecto', /verificador/)
+await rechaza(() => adminMal({ correo: 'sin-arroba' }), 'correo inválido', /correo no es válido/)
+await rechaza(() => adminMal({ telefono: '123' }), 'teléfono inválido', /teléfono no es válido/)
+await rechaza(() => adminMal({ ciudad: '' }), 'la ciudad es obligatoria', /ciudad/)
 const idA = ea.id
 await P.call('empresas_update', { id: idA, data: { plan: 'pro', datos: { direccion: 'Av. Principal 123' } } })
 const edit = (await P.call('empresas_list')).find((e) => e.id === idA)
 ok(edit.plan === 'pro' && edit.datos.direccion === 'Av. Principal 123' && edit.datos.ruc === '1790000000001', 'empresas_update cambia plan y datos sin perder los demás')
-await rechaza(() => A.call('login', { usuario: `ana${sufijo}@a.com`, clave: 'mala' }), 'login con clave mala', /incorrectos/)
-ok((await A.call('login', { usuario: `ana${sufijo}@a.com`, clave: claveA })).usuario.usuario === 'ana', 'login correcto')
+await rechaza(() => A.call('login', { usuario: ea.usuario, clave: 'mala' }), 'login con clave mala', /incorrectos/)
+ok((await A.call('login', { usuario: ea.usuario.toUpperCase(), clave: claveA })).usuario.usuario === ea.usuario, 'se ingresa con el usuario (sin distinguir mayúsculas)')
 
 // --- usuarios: el superadmin crea un técnico (clave temporal) y este debe cambiarla
-const tec = await A.call('usuarios_create', { data: { usuario: 'tec1', nombre: 'Técnico Uno', rol: 'tecnico', clave: 'Temporal12345', correo: `tec${sufijo}@a.com` } })
-ok(tec.rol === 'tecnico' && tec.cambiarClave === true, 'usuarios_create crea el técnico')
-await rechaza(() => A.call('usuarios_create', { data: { usuario: 'tec1', nombre: 'x', rol: 'tecnico', clave: 'Temporal12345', correo: `otro${sufijo}@a.com` } }), 'usuario repetido', /ya existe/i)
-const lt = await T.call('login', { usuario: `tec${sufijo}@a.com`, clave: 'Temporal12345' })
-ok(lt.usuario.cambiarClave === true, 'el técnico entra con clave temporal y debe cambiarla')
+const tec = await crearUsuario(A, 'Técnico Uno Gómez', 'tecnico', 1)
+ok(tec.rol === 'tecnico' && tec.cambiarClave === true && /^tecnico\d{4}[a-z]*\d*$/.test(tec.usuario) && tec.cedula, `usuarios_create genera el usuario ${tec.usuario} y guarda los datos`)
+await rechaza(() => crearUsuario(A, 'Otra Persona Distinta', 'tecnico', 1), 'cédula repetida en la empresa', /misma cédula|esa cédula/)
+await rechaza(() => A.call('usuarios_create', { data: { ...persona('Dato Malo Cedula', 5, { cedula: '1234567890' }), rol: 'tecnico' } }), 'cédula inválida al crear un usuario', /verificador/)
+await rechaza(() => A.call('usuarios_create', { data: { ...persona('Sin Rol Elegido', 6) } }), 'el rol es obligatorio', /rol/)
+const tecB = await crearUsuario(B, 'Técnico Uno Gómez', 'tecnico', 1)
+ok(tecB.usuario !== tec.usuario && tecB.usuario.startsWith('tecnico'), `el usuario es único en toda la plataforma: ${tecB.usuario}`)
+await rechaza(() => T.call('login', { usuario: tec.usuario, clave: 'Temporal12345' }), 'ya no hay una clave fija: la temporal es la cédula', /incorrectos/)
+const lt = await T.call('login', { usuario: tec.usuario, clave: cedulaDe(1) })
+ok(lt.usuario.cambiarClave === true, 'el técnico entra con su cédula (clave temporal) y debe cambiarla')
 await rechaza(() => T.call('visitas_list', {}), 'sin cambiar la clave no se usa la app', /CAMBIAR_CLAVE|cambiar tu clave/)
-await rechaza(() => T.call('cambiar_clave', { actual: 'Temporal12345', nueva: 'corta' }), 'clave nueva débil', /10 caracteres|al menos/i)
-const cc = await T.call('cambiar_clave', { actual: 'Temporal12345', nueva: 'NuevaClave12345' })
+await rechaza(() => T.call('cambiar_clave', { actual: cedulaDe(1), nueva: 'corta' }), 'clave nueva débil', /10 caracteres|al menos/i)
+const cc = await T.call('cambiar_clave', { actual: cedulaDe(1), nueva: 'NuevaClave12345' })
 ok(cc.usuario.cambiarClave === false, 'cambiar_clave quita la obligación')
-ok((await A.call('tecnicos_list')).some((t) => t.usuario === 'tec1'), 'tecnicos_list incluye al técnico')
+ok((await A.call('tecnicos_list')).some((t) => t.usuario === tec.usuario), 'tecnicos_list incluye al técnico')
 
 // --- visitas
 const manana = '2026-11-21'
-const v = await A.call('visitas_create', { data: { fecha: manana, hora: '09:30', cliente: 'Ferretería Sol', direccion: 'Av. 1', telefono: '099', tipo: 'Inspección', responsable: 'tec1', notas: '' } })
-ok(v.hora === '09:30' && v.responsable === 'tec1' && v.autor === 'ana' && v.estado === 'Programada' && v.clienteId, 'visitas_create devuelve la forma de la app (usuarios por nombre, cliente registrado)', JSON.stringify(v))
-const v2 = await A.call('visitas_create', { data: { id: v.id, fecha: manana, hora: '09:30', cliente: 'Ferretería Sol', tipo: 'Inspección', responsable: 'tec1' } })
+const v = await A.call('visitas_create', { data: { fecha: manana, hora: '09:30', cliente: 'Ferretería Sol', direccion: 'Av. 1', telefono: '099', tipo: 'Inspección', responsable: tec.usuario, notas: '' } })
+ok(v.hora === '09:30' && v.responsable === tec.usuario && v.autor === ea.usuario && v.estado === 'Programada' && v.clienteId, 'visitas_create devuelve la forma de la app (usuarios por nombre, cliente registrado)', JSON.stringify(v))
+const v2 = await A.call('visitas_create', { data: { id: v.id, fecha: manana, hora: '09:30', cliente: 'Ferretería Sol', tipo: 'Inspección', responsable: tec.usuario } })
 ok(v2.id === v.id, 'repetir la creación con el mismo id no duplica')
 await rechaza(() => A.call('visitas_create', { data: { fecha: manana, hora: '10:00', cliente: 'X', tipo: 'Inspección', responsable: 'nadie' } }), 'responsable inexistente', /Técnico inválido/)
 const lista = await A.call('visitas_list', { desde: manana, orden: 'asc' })
 ok(lista.items.length === 1 && lista.total === 1 && lista.antes === 0, 'visitas_list con filtros y total')
 ok((await A.call('visitas_list', { q: 'ferret' })).total === 1 && (await A.call('visitas_list', { q: 'zzzz' })).total === 0, 'visitas_list busca por cliente, dirección o tipo')
 for (const [i, nombre] of ['Panadería Luna', 'Taller Sur', 'Hotel Centro'].entries()) {
-  await A.call('visitas_create', { data: { fecha: `2026-12-0${i + 1}`, hora: '10:00', cliente: nombre, tipo: 'Mantenimiento', responsable: 'tec1' } })
+  await A.call('visitas_create', { data: { fecha: `2026-12-0${i + 1}`, hora: '10:00', cliente: nombre, tipo: 'Mantenimiento', responsable: tec.usuario } })
 }
 const pag1 = await A.call('visitas_list', { orden: 'asc', limit: 2, offset: 0 })
 const pag2 = await A.call('visitas_list', { orden: 'asc', limit: 2, offset: 2 })
@@ -95,8 +106,8 @@ ok((await A.call('notificaciones_list', { resumen: true })).noLeidas === 0, 'not
 ok((await T.call('notificaciones_list', {})).items.some((n) => n.tipo === 'visita_asignada'), 'el técnico recibió el aviso de visita asignada')
 
 // --- informes
-const inf = await T.call('informes_create', { data: { visitaId: v.id, fecha: manana, cliente: 'Ferretería Sol', titulo: 'Revisión', tipo: 'Inspección', estado: 'Borrador', responsable: 'tec1', checklist: JSON.stringify([{ texto: 'Cámaras', resultado: 'falla', obs: '' }]) } })
-ok(/^INF-\d{4}$/.test(inf.numero) && inf.autor === 'tec1', 'informes_create numera el informe', inf.numero)
+const inf = await T.call('informes_create', { data: { visitaId: v.id, fecha: manana, cliente: 'Ferretería Sol', titulo: 'Revisión', tipo: 'Inspección', estado: 'Borrador', responsable: tec.usuario, checklist: JSON.stringify([{ texto: 'Cámaras', resultado: 'falla', obs: '' }]) } })
+ok(/^INF-\d{4}$/.test(inf.numero) && inf.autor === tec.usuario, 'informes_create numera el informe', inf.numero)
 await rechaza(() => T.call('informes_update', { id: inf.id, data: { estado: 'Finalizado' } }), 'no se finaliza con la checklist incompleta', /checklist/i)
 const fin = await T.call('informes_update', { id: inf.id, data: { estado: 'Finalizado', checklist: JSON.stringify([{ texto: 'Cámaras', resultado: 'falla', obs: 'Lente sucio' }]) } })
 ok(fin.estado === 'Finalizado' && typeof fin.checklist === 'string', 'se finaliza con la checklist completa')
@@ -106,6 +117,72 @@ ok(li.items.length === 1 && li.items[0].descripcion === undefined && li.total ==
 ok((await A.call('informes_list', { q: 'revis' })).items.length === 1 && (await A.call('informes_list', { q: 'zzz' })).items.length === 0, 'búsqueda por texto')
 ok((await B.call('informes_list', {})).total === 0, 'B no ve informes de A')
 ok((await A.call('notificaciones_list', {})).items.some((n) => n.tipo === 'informe_finalizado'), 'el admin recibe el aviso de informe finalizado')
+
+// --- el administrador también elabora informes (con o sin visita) y ve los de su empresa
+const AD = nuevo()
+const adm = await crearUsuario(A, 'Admin Uno Vera', 'admin', 2)
+await AD.call('login', { usuario: adm.usuario, clave: cedulaDe(2) })
+await AD.call('cambiar_clave', { actual: cedulaDe(2), nueva: 'NuevaClave12345' })
+const infAdmin = await AD.call('informes_create', { data: { fecha: manana, cliente: 'Cliente directo', titulo: 'Informe del administrador', tipo: 'Otro', estado: 'Borrador', checklist: '[]' } })
+ok(/^INF-\d{4}$/.test(infAdmin.numero) && infAdmin.autor === adm.usuario, 'el administrador crea un informe sin visita y se numera')
+const infAdminVisita = await AD.call('informes_create', { data: { visitaId: v.id, fecha: manana, cliente: 'Ferretería Sol', titulo: 'Informe de visita por admin', tipo: 'Inspección', estado: 'Finalizado', checklist: JSON.stringify([{ texto: 'x', resultado: 'ok', obs: '' }]) } })
+ok(infAdminVisita.estado === 'Finalizado', 'el administrador crea un informe ligado a una visita ya finalizado')
+ok((await AD.call('informes_list', {})).total === 3, 'el administrador ve los informes de su empresa (suyos y del técnico)')
+ok((await T.call('informes_list', {})).items.every((i) => i.autor === tec.usuario || i.responsable === tec.usuario), 'el técnico solo ve los suyos')
+
+// --- edición de los datos de un usuario (el usuario de ingreso no cambia)
+const editado = await A.call('usuarios_update', { id: tec.id, data: { ciudad: 'Guayaquil', telefono: '0987654321', cargo: 'Técnico de campo', nombre: 'Técnico Uno Gómez Mejía' } })
+ok(editado.ciudad === 'Guayaquil' && editado.cargo === 'Técnico de campo' && editado.usuario === tec.usuario, 'usuarios_update cambia los datos sin cambiar el usuario')
+await rechaza(() => A.call('usuarios_update', { id: tec.id, data: { cedula: '1710034066' } }), 'al editar se valida la cédula', /verificador/)
+await rechaza(() => A.call('usuarios_update', { id: tec.id, data: { telefono: 'abc' } }), 'al editar se valida el teléfono', /teléfono no es válido/)
+
+// --- usuario sugerido (primer nombre + últimos 4 dígitos de la cédula; si está ocupado, letras del apellido) y editable
+const azar = () => [...Array(8)].map(() => String.fromCharCode(97 + Math.floor(Math.random() * 26))).join('')
+const primero = `Q${azar()}`
+const ced = cedulaDe(40)
+const sug1 = await A.call('usuarios_sugerir', { nombre: `${primero} Andrés Romero Vélez`, cedula: ced })
+ok(sug1 === primero.toLowerCase() + ced.slice(-4), `usuarios_sugerir: primer nombre + 4 últimos dígitos (${sug1})`)
+const u1 = await A.call('usuarios_create', { data: { ...persona(`${primero} Andrés Romero Vélez`, 40), rol: 'tecnico' } })
+ok(u1.usuario === sug1, 'sin escribir usuario, la cuenta se crea con el sugerido')
+const nombre2 = `${primero} Beatriz Romero Cruz`
+const sug2 = await B.call('usuarios_sugerir', { nombre: nombre2, cedula: ced })
+ok(sug2 === `${sug1}r`, `si está ocupado se agrega la primera letra del apellido (${sug2})`)
+const u2 = await B.call('usuarios_create', { data: { ...persona(nombre2, 40), rol: 'tecnico' } })
+ok(u2.usuario === sug2, 'el ocupado es de otra empresa: el usuario es único en toda la plataforma')
+ok((await B.call('usuarios_sugerir', { nombre: `${primero} Carlos Romero Mora`, cedula: ced })) === `${sug1}ro`, 'si también está ocupado, la segunda letra del apellido')
+ok((await A.call('usuarios_disponible', { usuario: sug1 })) === false && (await A.call('usuarios_disponible', { usuario: `libre${azar()}` })) === true, 'usuarios_disponible indica si un usuario está libre')
+ok((await A.call('usuarios_disponible', { usuario: 'Con Espacios' })) === false, 'un usuario con formato inválido no está disponible')
+const propio = `propio${azar()}`
+const u3 = await A.call('usuarios_create', { data: { ...persona('Persona Con Usuario Propio', 41), usuario: propio, rol: 'admin' } })
+ok(u3.usuario === propio, 'el usuario sugerido se puede modificar al crear la cuenta')
+await rechaza(() => A.call('usuarios_create', { data: { ...persona('Otra Persona Distinta Más', 42), usuario: propio, rol: 'admin' } }), 'usuario escrito que ya existe', /ya está en uso/)
+await rechaza(() => A.call('usuarios_create', { data: { ...persona('Otra Persona Distinta Más', 42), usuario: 'x', rol: 'admin' } }), 'usuario escrito con formato inválido', /inválido/)
+await rechaza(() => T.call('usuarios_sugerir', { nombre: 'Juan Perez', cedula: ced }), 'el técnico no sugiere usuarios', /permisos/)
+await rechaza(() => A.call('usuarios_sugerir', { nombre: 'Juan Perez', cedula: '12' }), 'sin cédula no hay sugerencia', /cédula/)
+
+// --- restablecer la clave: vuelve a ser la cédula (temporal) y se debe cambiar al entrar
+await A.call('usuarios_update', { id: u1.id, data: { clave: u1.cedula, temporal: true } })
+await rechaza(() => A.call('usuarios_update', { id: u1.id, data: { clave: u1.cedula } }), 'una clave escrita a mano debe cumplir la política', /letras|caracteres/)
+const R1 = nuevo()
+ok((await R1.call('login', { usuario: u1.usuario, clave: u1.cedula })).usuario.cambiarClave === true, 'tras restablecer entra con la cédula y debe cambiar la clave')
+await R1.call('cambiar_clave', { actual: u1.cedula, nueva: 'ClaveNueva12345' })
+ok(!(await A.cliente.rpc('restablecer_clave', { p_id: u1.id })).error, 'restablecer_clave sin clave usa la cédula del usuario')
+const R2 = nuevo()
+ok((await R2.call('login', { usuario: u1.usuario, clave: u1.cedula })).usuario.cambiarClave === true, 'la cédula vuelve a ser la clave temporal')
+
+// --- Dashboard: cifras por rol (el técnico solo cuenta lo suyo) y resumen de la plataforma
+const dA = await A.call('dashboard_resumen')
+const dT = await T.call('dashboard_resumen')
+const claves = ['visitasHoy', 'proximas', 'porAceptar', 'enCurso', 'realizadasMes', 'atrasadas', 'informesBorrador', 'informesFinalizadosMes', 'clientes', 'tecnicos']
+ok(claves.every((k) => typeof dA[k] === 'number') && dA.porDia.length === 14 && Array.isArray(dA.proximasLista) && Array.isArray(dA.ultimosInformes), 'dashboard_resumen entrega las cifras, el gráfico y las listas')
+ok(dA.porDia.filter((d) => d.fecha === dA.hoy).length === 1, 'el gráfico incluye el día de hoy (7 atrás y 7 por delante)')
+ok(dA.clientes >= 4 && dT.clientes === 0, 'el técnico no ve el conteo de clientes')
+ok(dA.ultimosInformes.length >= 2 && dT.ultimosInformes.every((i) => i.id), 'últimos informes de la empresa (admin) y solo los del técnico')
+ok(dT.informesBorrador + dT.informesFinalizadosMes <= dA.informesBorrador + dA.informesFinalizadosMes, 'el técnico cuenta menos o igual que el administrador')
+ok(dA.plataforma === undefined && dT.plataforma === undefined, 'solo la plataforma recibe su resumen')
+const dP = await P.call('dashboard_resumen')
+ok(dP.plataforma.empresas >= 2 && dP.plataforma.activas >= 2 && dP.plataforma.usuarios >= 4 && typeof dP.plataforma.porPlan === 'object', 'resumen de la plataforma: empresas, usuarios y planes')
+ok((await B.call('dashboard_resumen')).visitasHoy === 0 && (await B.call('dashboard_resumen')).proximasLista.length === 0, 'cada empresa ve solo su resumen')
 
 // --- configuración
 await rechaza(() => A.call('configuracion_update', { seccion: 'tema', data: { primario: '#ffff00', acento: '#f6c915' } }), 'color demasiado claro', /demasiado claro/)
@@ -119,9 +196,9 @@ await rechaza(() => T.call('usuarios_list'), 'el técnico no lista usuarios', /p
 
 // --- una empresa desactivada deja sin acceso a sus usuarios
 await P.call('empresas_update', { id: idA, data: { activa: false } })
-await rechaza(() => A.call('login', { usuario: `ana${sufijo}@a.com`, clave: claveA }), 'empresa desactivada: sus usuarios no entran', /no pertenece|incorrectos/)
+await rechaza(() => A.call('login', { usuario: ea.usuario, clave: claveA }), 'empresa desactivada: sus usuarios no entran', /no pertenece|incorrectos/)
 await P.call('empresas_update', { id: idA, data: { activa: true } })
-await A.call('login', { usuario: `ana${sufijo}@a.com`, clave: claveA })
+await A.call('login', { usuario: ea.usuario, clave: claveA })
 ok(true, 'al reactivarla vuelven a entrar')
 
 // --- fotos (la subida real se prueba en probar-fotos.mjs) y cierre de sesión
