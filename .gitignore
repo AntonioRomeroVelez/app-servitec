@@ -5,3 +5,4 @@ dist
 dist-local
 node_modules
 dist-supabase
+supabase/.temp/

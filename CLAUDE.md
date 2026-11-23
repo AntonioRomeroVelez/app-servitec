@@ -88,9 +88,13 @@ Decisión: datos en Supabase (Postgres + PostgREST), una sola base con `empresa_
 
 `apps-script/test/harness.js` simula Apps Script (SpreadsheetApp, CacheService, LockService, PropertiesService, MailApp, DriveApp, etc.) y ejecuta el `Code.gs` real. Suites: seguridad, flujo, rendimiento (20 000 informes: ~2,7 MB de lectura frente a ~226 MB antes de optimizar), notificaciones, offline, clientes, bitácora, configuración y pwa (detección de plataforma y lectura real de los QR con `jsqr`). `servidor-local.js` expone el mismo código por HTTP para probar el frontend completo.
 
-## Despliegue pendiente y notas
+## Despliegue y notas
 
-- Falta publicar el frontend con HTTPS (GitHub Pages o Netlify) para que la instalación y el QR funcionen en celulares.
-- El `Code.gs` publicado en Google debe actualizarse pegando el del repositorio y creando una nueva versión de la implementación.
-- `.env` (con `VITE_SCRIPT_URL`) está en `.gitignore`; `dist`, `dist-local` y `node_modules` también.
+- Supabase en la nube: proyecto `ServiTec` (ref `sishxiokkkwlblpqqdjr`). Las migraciones `0001` a `0010` ya están aplicadas con `npx supabase db push --remote`. Con esta versión de la CLI, `db push` sin `--remote` apunta a la base LOCAL (127.0.0.1:54322, que usa otro proyecto): usar siempre `--remote`. La CLI en este entorno no es interactiva: el token va en `SUPABASE_ACCESS_TOKEN` y la contraseña de la base la escribe el usuario en su propia terminal; nunca pedirlos en el chat.
+- Auth del proyecto en la nube: "Confirm email" apagado (las cuentas son `<usuario>@servitec.local`), registro abierto apagado (la app no usa `signUp`; las cuentas se crean con `crear_usuario`) y largo mínimo de clave 10. El primer superadmin de plataforma se creó por SQL en el editor de Supabase (misma consulta que `supabase/local/superadmin.mjs`, con la empresa, `plataforma_admins` y `configuracion` iniciales); la clave se escribe solo en el editor y se borra después.
+- `VITE_SUPABASE_ANON_KEY` debe ser la clave real (`eyJ...` o `sb_publishable_...`): con un valor de relleno Supabase responde `Invalid API key` y la app lo muestra como "Usuario o clave incorrectos". Nunca usar la `service_role` en el frontend.
+- Frontend en Vercel (Vite, `npm run build`, salida `dist`, sin `vercel.json` porque no hay router). Variables de entorno en Vercel: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` y `VITE_FOTOS_URL`; no definir `VITE_SCRIPT_URL` (Supabase tiene prioridad y la URL quedaría compilada en el código público). Las variables `VITE_*` se leen al compilar: tras cambiarlas hay que volver a desplegar.
+- Fotos: `apps-script-fotos/Code.gs` se publica en script.google.com con las propiedades `SUPABASE_URL` y `SUPABASE_ANON_KEY` (acceso "Cualquier persona", ejecutar como "Yo"); su URL `/exec` va en `VITE_FOTOS_URL`. Una foto solo se puede subir cuando el técnico aceptó la visita.
+- El `Code.gs` heredado (Sheets) solo hace falta si se usa `VITE_SCRIPT_URL`; si se actualiza, pegar el del repositorio y crear una nueva versión de la implementación.
+- `.env` (con `VITE_SUPABASE_*`, `VITE_FOTOS_URL`) está en `.gitignore`; `dist`, `dist-local`, `node_modules` y `supabase/.temp/` también.
 - Git en Windows avisa de LF/CRLF: es normal.
