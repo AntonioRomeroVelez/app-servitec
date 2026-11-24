@@ -51,6 +51,17 @@ const idA = ea.id
 await P.call('empresas_update', { id: idA, data: { plan: 'pro', datos: { direccion: 'Av. Principal 123' } } })
 const edit = (await P.call('empresas_list')).find((e) => e.id === idA)
 ok(edit.plan === 'pro' && edit.datos.direccion === 'Av. Principal 123' && edit.datos.ruc === '1790000000001', 'empresas_update cambia plan y datos sin perder los demás')
+// La plataforma configura los Ajustes de otra empresa (colores, informes, tipos) sin tocar los de las demás
+const cfgA = await P.call('empresas_config_get', { id: idA })
+ok(cfgA.empresa?.nombre === 'Empresa A', 'empresas_config_get devuelve la configuración de la empresa elegida')
+const cfgA2 = await P.call('empresas_config_update', { id: idA, seccion: 'tema', data: { primario: '#0b6e4f', acento: '#f6c915' } })
+ok(cfgA2.tema.primario === '#0b6e4f', 'empresas_config_update guarda los colores de otra empresa')
+ok((await A.call('configuracion_get')).tema.primario === '#0b6e4f', 'el superadmin de esa empresa ve los colores que puso la plataforma')
+ok((await P.call('empresas_config_get', { id: eb.id })).tema?.primario !== '#0b6e4f', 'la configuración de otra empresa no cambió')
+await P.call('empresas_config_update', { id: idA, seccion: 'tema', restablecer: true })
+ok(!(await P.call('empresas_config_get', { id: idA })).tema, 'empresas_config_update con restablecer borra la sección')
+await rechaza(() => P.call('empresas_config_update', { id: idA, seccion: 'tema', data: { primario: 'rojo', acento: '#fff' } }), 'valida los colores', /color|formato/i)
+await rechaza(() => A.call('empresas_config_get', { id: idA }), 'el administrador de una empresa no usa la configuración de plataforma', /permisos/)
 await rechaza(() => A.call('login', { usuario: ea.usuario, clave: 'mala' }), 'login con clave mala', /incorrectos/)
 ok((await A.call('login', { usuario: ea.usuario.toUpperCase(), clave: claveA })).usuario.usuario === ea.usuario, 'se ingresa con el usuario (sin distinguir mayúsculas)')
 

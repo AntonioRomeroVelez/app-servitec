@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
-import { Building2, KeyRound, Pencil, Plus, Power, X } from 'lucide-vue-next'
+import { Building2, KeyRound, Pencil, Plus, Power, Settings, X } from 'lucide-vue-next'
 import { call } from '../api'
 import { useToast } from '../composables/useToast'
 import { normalizar, validarClave } from '../utils'
@@ -11,6 +11,7 @@ import CredencialesNuevas from '../components/CredencialesNuevas.vue'
 import BarraFiltros from '../components/BarraFiltros.vue'
 import Paginador from '../components/Paginador.vue'
 import Modal from '../components/Modal.vue'
+import ConfiguracionView from './ConfiguracionView.vue'
 import { usePaginaLocal } from '../composables/usePaginaLocal'
 
 // Empresas del SaaS. Solo las crea y edita el superadmin de la plataforma: pone el nombre, llena sus datos y crea
@@ -29,6 +30,7 @@ const credenciales = ref(null) // { nombre, usuario, clave } del administrador r
 const sugerir = (nombre, cedula) => call('usuarios_sugerir', { nombre, cedula })
 const disponible = (usuario) => call('usuarios_disponible', { usuario })
 
+const configurando = ref(null) // empresa cuyos Ajustes completos se están editando (la plataforma entra como su superadmin)
 const editando = ref(null) // null = cerrado, 'nueva' = alta, o el id de la empresa que se edita
 
 async function cargar() {
@@ -220,6 +222,11 @@ async function alternar(e) {
   </form>
   </Modal>
 
+  <!-- Ajustes completos de la empresa: datos, colores y logo, informes y tipos de visita -->
+  <Modal v-if="configurando" :titulo="`Ajustes de ${configurando.nombre}`" @cerrar="configurando = null; cargar()">
+    <ConfiguracionView :empresa-id="configurando.id" />
+  </Modal>
+
   <!-- Administradores de la empresa: restablecer la clave de uno -->
   <Modal v-if="adminsDe" :titulo="`Administradores de ${adminsDe.nombre}`" @cerrar="adminsDe = null">
     <p v-if="cargandoAdmins" class="py-4 text-center text-brand-700">Cargando…</p>
@@ -262,6 +269,7 @@ async function alternar(e) {
         <span v-if="e.datos?.ruc || e.datos?.telefono" class="truncate text-xs text-brand-700/70">{{ [e.datos.ruc && `RUC ${e.datos.ruc}`, e.datos.telefono].filter(Boolean).join(' · ') }}</span>
       </span>
       <span class="flex shrink-0 gap-1">
+        <button class="flex size-10 items-center justify-center rounded-xl border border-brand-200 text-brand-700" aria-label="Configurar la empresa (colores, logo, informes, tipos de visita)" @click="configurando = e"><Settings :size="18" aria-hidden="true" /></button>
         <button class="flex size-10 items-center justify-center rounded-xl border border-brand-200 text-brand-700" aria-label="Editar datos" @click="abrir(e)"><Pencil :size="18" aria-hidden="true" /></button>
         <button class="flex size-10 items-center justify-center rounded-xl border border-brand-200 text-brand-700" aria-label="Restablecer la clave del administrador" @click="abrirAdmins(e)"><KeyRound :size="18" aria-hidden="true" /></button>
         <button class="flex size-10 items-center justify-center rounded-xl border border-brand-200" :class="e.activa ? 'text-red-600' : 'text-emerald-700'" :aria-label="e.activa ? 'Desactivar empresa' : 'Activar empresa'" @click="alternar(e)"><Power :size="18" aria-hidden="true" /></button>

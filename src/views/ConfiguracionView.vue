@@ -1,16 +1,25 @@
 <script setup>
-import { reactive, ref, computed, watch, onBeforeUnmount } from 'vue'
+import { reactive, ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { Building2, Palette, FileText, ListChecks, ImagePlus, Trash2, RotateCcw, Save, ArrowUp, ArrowDown, Plus, Check, ChevronDown, ChevronUp, CircleAlert } from 'lucide-vue-next'
 import { useToast } from '../composables/useToast'
 import { useConfiguracion } from '../composables/useConfiguracion'
 import { TEMAS_PREDEFINIDOS, contraste } from '../tema'
 import { procesarLogo } from '../imagen'
-import { clonar } from '../configuracion'
+import { clonar, combinar } from '../configuracion'
+import { call } from '../api'
 
 // Ajustes de la app (solo superadmin): datos de la empresa, colores y logo, informes, y tipos de visita con su checklist.
-// Cada sección se guarda por separado en la hoja "Configuración" y se aplica a todos los usuarios.
-const props = defineProps({ solicitud: Object }) // desde el menú: { seccion } abre esa sección
+// Cada sección se guarda por separado y se aplica a todos los usuarios de la empresa.
+// Con `empresaId` (solo el superadmin de la plataforma) edita los Ajustes de OTRA empresa: no toca el tema ni la
+// configuración guardada de la propia sesión.
+const props = defineProps({ solicitud: Object, empresaId: String }) // desde el menú: { seccion } abre esa sección
 const C = useConfiguracion()
+const toast = useToast()
+const ajena = computed(() => !!props.empresaId)
+const remota = ref(null) // configuración de la empresa ajena
+const cargando = ref(false)
+const cfg = computed(() => (ajena.value ? remota.value : C.config.value))
+const logoActual = computed(() => cfg.value.logo)
 
 const abierta = ref('empresa')
 watch(() => props.solicitud, (s) => s?.seccion && (abierta.value = s.seccion), { immediate: true })
@@ -25,14 +34,27 @@ const logoNuevo = ref('') // logo elegido y reducido, todavía sin guardar
 
 // Copia de trabajo = lo guardado (se vuelve a llenar tras guardar o restablecer)
 function cargarCopias() {
-  Object.assign(empresa, clonar(C.config.value.empresa))
-  Object.assign(tema, clonar(C.config.value.tema))
-  Object.assign(informes, clonar(C.config.value.informes))
-  tipos.value = clonar(C.config.value.tipos)
+  Object.assign(empresa, clonar(cfg.value.empresa))
+  Object.assign(tema, clonar(cfg.value.tema))
+  Object.assign(informes, clonar(cfg.value.informes))
+  tipos.value = clonar(cfg.value.tipos)
 }
+if (ajena.value) remota.value = combinar(null)
 cargarCopias()
 
-const toast = useToast()
+onMounted(async () => {
+  if (!ajena.value) return
+  cargando.value = true
+  try {
+    remota.value = combinar(await call('empresas_config_get', { id: props.empresaId }))
+    cargarCopias()
+  } catch (e) {
+    toast.error(e.message)
+  } finally {
+    cargando.value = false
+  }
+})
+
 const mostrar = (seccion, texto, error = false) => {
   Object.assign(aviso, { seccion, texto, error })
   error ? toast.error(texto) : toast.exito(texto)
@@ -54,10 +76,14 @@ async function ejecutar(seccion, accion, exito) {
     guardando.value = ''
   }
 }
-const guardar = (seccion, data) => ejecutar(seccion, () => C.guardar(seccion, data), 'Cambios guardados. Ya los ven todos los usuarios.')
+const guardarAjena = async (seccion, data, restablecer = false) => {
+  remota.value = combinar(await call('empresas_config_update', { id: props.empresaId, seccion, data, restablecer }))
+}
+const guardar = (seccion, data) =>
+  ejecutar(seccion, () => (ajena.value ? guardarAjena(seccion, data) : C.guardar(seccion, data)), 'Cambios guardados. Ya los ven todos los usuarios.')
 const restablecer = (seccion, nombre) => {
   if (!confirm(`¿Volver a los valores de fábrica en "${nombre}"?`)) return
-  ejecutar(seccion, () => C.restablecer(seccion), 'Se restablecieron los valores de fábrica.')
+  ejecutar(seccion, () => (ajena.value ? guardarAjena(seccion, undefined, true) : C.restablecer(seccion)), 'Se restablecieron los valores de fábrica.')
 }
 
 // ---------- Colores: vista previa en vivo ----------
@@ -106,7 +132,8 @@ const abiertoTipo = ref(null)
 </script>
 
 <template>
-  <div class="grid gap-3">
+  <p v-if="cargando" class="py-6 text-center text-brand-700">Cargando los ajustes de la empresa…</p>
+  <div v-else class="grid gap-3">
     <!-- Datos de la empresa -->
     <section class="tarjeta p-0">
       <button class="flex min-h-14 w-full items-center gap-3 px-4 text-left" :aria-expanded="abierta === 'empresa'" @click="alternar('empresa')">
@@ -166,7 +193,7 @@ const abiertoTipo = ref(null)
           <h3 class="font-semibold text-brand-800">Logo</h3>
           <div class="flex flex-wrap items-center gap-3">
             <span class="flex h-20 min-w-32 items-center justify-center rounded-xl border border-dashed border-brand-300 bg-white px-3">
-              <img v-if="logoNuevo || C.logo.value" :src="logoNuevo || C.logo.value" alt="Logo de la empresa" class="max-h-16 max-w-48 object-contain" />
+              <img v-if="logoNuevo || logoActual" :src="logoNuevo || logoActual" alt="Logo de la empresa" class="max-h-16 max-w-48 object-contain" />
               <span v-else class="text-sm text-brand-700/60">Sin logo</span>
             </span>
             <div class="flex flex-wrap gap-2">
@@ -175,7 +202,7 @@ const abiertoTipo = ref(null)
                 Elegir imagen
                 <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" class="sr-only" @change="elegirLogo" />
               </label>
-              <button v-if="C.logo.value && !logoNuevo" type="button" class="btn-peligro min-h-11 flex-none text-sm" :disabled="guardando === 'logo'" @click="guardar('logo', { logo: '' })">
+              <button v-if="logoActual && !logoNuevo" type="button" class="btn-peligro min-h-11 flex-none text-sm" :disabled="guardando === 'logo'" @click="guardar('logo', { logo: '' })">
                 <Trash2 :size="18" aria-hidden="true" />Quitar logo
               </button>
             </div>

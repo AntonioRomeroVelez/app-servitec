@@ -270,6 +270,24 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
       ok(await sb.rpc('editar_empresa', { p_id: id, p: d }))
       return true
     },
+    // Ajustes completos de una empresa (datos, colores, logo, informes, tipos de visita): los ve y edita la plataforma
+    async empresas_config_get({ id }) {
+      return ok(await sb.rpc('config_de_empresa', { p_id: id }))
+    },
+    async empresas_config_update({ id, seccion, data, restablecer }) {
+      if (restablecer) {
+        ok(await sb.rpc('restablecer_config_empresa', { p_id: id, p_seccion: seccion }))
+      } else {
+        let valor
+        try {
+          valor = valorSeccion(seccion, data)
+        } catch (e) {
+          throw fallo(e.message)
+        }
+        ok(await sb.rpc('guardar_config_empresa', { p_id: id, p_seccion: seccion, p_valor: valor }))
+      }
+      return acciones.empresas_config_get({ id })
+    },
 
     // ---- usuarios (superadmin) ----
     async usuarios_list() {
