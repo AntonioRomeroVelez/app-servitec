@@ -1,6 +1,6 @@
 <script setup>
 import { reactive, ref, computed, watch, onMounted } from 'vue'
-import { Plus, KeyRound, Pencil, Phone, MapPin, Mail } from 'lucide-vue-next'
+import { Plus, KeyRound, Pencil, Phone, MapPin, Mail, IdCard, Briefcase } from 'lucide-vue-next'
 import { useUsuarios } from '../composables/useUsuarios'
 import { useAuth, ROLES } from '../composables/useAuth'
 import { confirmar } from '../composables/useConfirmar'
@@ -14,6 +14,9 @@ import FormularioPersona from '../components/FormularioPersona.vue'
 import CredencialesNuevas from '../components/CredencialesNuevas.vue'
 import { usePaginaLocal } from '../composables/usePaginaLocal'
 import { call } from '../api'
+import Avatar from '../components/Avatar.vue'
+import Dato from '../components/Dato.vue'
+import { ETIQUETA_ROL, CLASE_ROL } from '../estados'
 
 const { usuarios, cargando, error, cargar, crear, actualizar } = useUsuarios()
 const { usuario: yo, esSuper } = useAuth() // el admin solo ve y gestiona técnicos; el superadmin, a todos
@@ -186,18 +189,24 @@ onMounted(() => cargar().catch(() => {}))
 
   <ul class="grid gap-2.5">
     <li v-for="u in pag.visibles.value" :key="u.id" class="tarjeta grid gap-2" :class="{ 'opacity-60': !u.activo }">
-      <div class="flex items-start justify-between gap-2">
-        <div class="min-w-0">
-          <strong class="text-brand-900">{{ u.nombre }}</strong>
-          <p class="text-sm text-brand-700">@{{ u.usuario }}<template v-if="u.cargo"> · {{ u.cargo }}</template></p>
-          <p v-if="u.cedula || u.ciudad" class="text-xs text-brand-700/70">
-            <template v-if="u.cedula">C.I. {{ u.cedula }}</template><template v-if="u.cedula && u.ciudad"> · </template><template v-if="u.ciudad">{{ u.ciudad }}</template>
-          </p>
-          <p v-if="u.telefono" class="flex items-center gap-1 text-xs text-brand-700/70"><Phone :size="12" class="shrink-0" aria-hidden="true" />{{ u.telefono }}</p>
-          <p v-if="u.correo" class="flex items-center gap-1 text-xs break-all text-brand-700/70"><Mail :size="12" class="shrink-0" aria-hidden="true" />{{ u.correo }}</p>
-          <p v-if="u.direccion" class="flex items-center gap-1 text-xs text-brand-700/70"><MapPin :size="12" class="shrink-0" aria-hidden="true" />{{ u.direccion }}</p>
+      <div class="flex items-start gap-3">
+        <Avatar :nombre="u.nombre" :inactivo="!u.activo" />
+        <div class="grid min-w-0 flex-1 gap-0.5">
+          <strong class="text-base leading-snug break-words text-brand-900">{{ u.nombre }}</strong>
+          <p class="text-sm text-brand-700">@{{ u.usuario }}</p>
         </div>
-        <span class="shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold" :class="u.rol === 'superadmin' ? 'bg-acento text-acento-texto' : 'bg-brand-100 text-brand-800'">{{ u.rol }}</span>
+        <span class="flex shrink-0 flex-col items-end gap-1">
+          <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold" :class="CLASE_ROL[u.rol] || 'bg-brand-100 text-brand-800'">{{ ETIQUETA_ROL[u.rol] || u.rol }}</span>
+          <span v-if="!u.activo" class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">Inactivo</span>
+        </span>
+      </div>
+      <div v-if="u.cargo || u.cedula || u.ciudad || u.telefono || u.correo || u.direccion" class="grid gap-1 rounded-xl bg-brand-50/70 p-2.5 sm:grid-cols-2">
+        <Dato v-if="u.cargo" :icono="Briefcase" etiqueta="Cargo">{{ u.cargo }}</Dato>
+        <Dato v-if="u.cedula" :icono="IdCard" etiqueta="Cédula">{{ u.cedula }}</Dato>
+        <Dato v-if="u.ciudad" :icono="MapPin" etiqueta="Ciudad">{{ u.ciudad }}</Dato>
+        <Dato v-if="u.telefono" :icono="Phone" etiqueta="Teléfono">{{ u.telefono }}</Dato>
+        <Dato v-if="u.correo" :icono="Mail" etiqueta="Correo" ajustar>{{ u.correo }}</Dato>
+        <Dato v-if="u.direccion" :icono="MapPin" etiqueta="Dirección" ajustar>{{ u.direccion }}</Dato>
       </div>
       <div class="flex flex-wrap gap-2">
         <button class="btn-borde min-h-10 text-sm" @click="abrirEdicion(u)">

@@ -3,6 +3,8 @@ import { confirmar } from '../composables/useConfirmar'
 import { ref, reactive, watch, onMounted, onBeforeUnmount } from 'vue'
 import { CalendarPlus, ChevronDown, ChevronUp, MapPin, Pencil, Phone, Plus, Trash2, X } from 'lucide-vue-next'
 import { call } from '../api'
+import Avatar from '../components/Avatar.vue'
+import Dato from '../components/Dato.vue'
 import { useAuth } from '../composables/useAuth'
 import { useClientes } from '../composables/useClientes'
 import EstadoBadge from '../components/EstadoBadge.vue'
@@ -104,10 +106,14 @@ async function alternarVisitas(c) {
   <ul class="grid gap-2.5">
     <li v-for="c in C.items.value" :key="c.id" class="tarjeta grid gap-2.5">
       <template v-if="editando !== c.id">
-        <div class="min-w-0">
-          <strong class="text-brand-900">{{ c.nombre }}</strong>
-          <p v-if="c.telefono" class="flex items-center gap-1.5 text-sm text-brand-700"><Phone :size="14" class="shrink-0" aria-hidden="true" />{{ c.telefono }}</p>
-          <p v-if="c.direccion" class="flex items-center gap-1.5 text-sm text-brand-700"><MapPin :size="14" class="shrink-0" aria-hidden="true" />{{ c.direccion }}</p>
+        <div class="flex items-start gap-3">
+          <Avatar :nombre="c.nombre" />
+          <div class="grid min-w-0 flex-1 gap-1">
+            <strong class="text-base leading-snug break-words text-brand-900">{{ c.nombre }}</strong>
+            <Dato v-if="c.telefono" :icono="Phone" etiqueta="Teléfono">{{ c.telefono }}</Dato>
+            <Dato v-if="c.direccion" :icono="MapPin" etiqueta="Dirección" ajustar>{{ c.direccion }}</Dato>
+            <p v-if="!c.telefono && !c.direccion" class="text-sm text-brand-700/60">Sin teléfono ni dirección registrados.</p>
+          </div>
         </div>
         <div class="flex flex-wrap gap-2">
           <button class="btn min-h-10 flex-none text-sm" @click="emit('agendar', c)">
@@ -125,7 +131,7 @@ async function alternarVisitas(c) {
           </button>
           <button v-if="esSuper" class="btn-peligro min-h-10 text-sm" @click="eliminar(c)">
             <Trash2 :size="16" aria-hidden="true" />
-            <span class="sr-only">Eliminar</span>
+            Eliminar
           </button>
         </div>
 

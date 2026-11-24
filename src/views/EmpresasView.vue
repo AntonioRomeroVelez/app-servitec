@@ -1,6 +1,6 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
-import { Building2, KeyRound, Pencil, Plus, Power, Settings, X } from 'lucide-vue-next'
+import { Building2, IdCard, KeyRound, Mail, Pencil, Phone, Plus, Power, Settings, Users } from 'lucide-vue-next'
 import { call } from '../api'
 import { useToast } from '../composables/useToast'
 import { confirmar } from '../composables/useConfirmar'
@@ -13,6 +13,8 @@ import BarraFiltros from '../components/BarraFiltros.vue'
 import Paginador from '../components/Paginador.vue'
 import Modal from '../components/Modal.vue'
 import ConfiguracionView from './ConfiguracionView.vue'
+import Avatar from '../components/Avatar.vue'
+import Dato from '../components/Dato.vue'
 import { usePaginaLocal } from '../composables/usePaginaLocal'
 
 // Empresas del SaaS. Solo las crea y edita el superadmin de la plataforma: pone el nombre, llena sus datos y crea
@@ -270,19 +272,31 @@ async function alternar(e) {
   <p v-else-if="!filtradas.length" class="py-10 text-center text-brand-700/70">No hay empresas que coincidan.</p>
 
   <ul class="grid gap-2.5">
-    <li v-for="e in pag.visibles.value" :key="e.id" class="tarjeta flex items-start gap-3" :class="{ 'opacity-60': !e.activa }">
-      <span class="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-100 text-brand-700"><Building2 :size="20" aria-hidden="true" /></span>
-      <span class="grid min-w-0 flex-1 gap-0.5">
-        <strong class="truncate text-brand-900">{{ e.nombre }}</strong>
-        <span class="text-xs text-brand-700/80">Plan {{ e.plan }} · {{ e.usuarios }} {{ e.usuarios === 1 ? 'usuario' : 'usuarios' }}<template v-if="!e.activa"> · desactivada</template></span>
-        <span v-if="e.datos?.ruc || e.datos?.telefono" class="truncate text-xs text-brand-700/70">{{ [e.datos.ruc && `RUC ${e.datos.ruc}`, e.datos.telefono].filter(Boolean).join(' · ') }}</span>
-      </span>
-      <span class="flex shrink-0 gap-1">
-        <button class="flex size-10 items-center justify-center rounded-xl border border-brand-200 text-brand-700" aria-label="Configurar la empresa (colores, logo, informes, tipos de visita)" @click="configurando = e"><Settings :size="18" aria-hidden="true" /></button>
-        <button class="flex size-10 items-center justify-center rounded-xl border border-brand-200 text-brand-700" aria-label="Editar datos" @click="abrir(e)"><Pencil :size="18" aria-hidden="true" /></button>
-        <button class="flex size-10 items-center justify-center rounded-xl border border-brand-200 text-brand-700" aria-label="Restablecer la clave del administrador" @click="abrirAdmins(e)"><KeyRound :size="18" aria-hidden="true" /></button>
-        <button class="flex size-10 items-center justify-center rounded-xl border border-brand-200" :class="e.activa ? 'text-red-600' : 'text-emerald-700'" :aria-label="e.activa ? 'Desactivar empresa' : 'Activar empresa'" @click="alternar(e)"><Power :size="18" aria-hidden="true" /></button>
-      </span>
+    <li v-for="e in pag.visibles.value" :key="e.id" class="tarjeta grid gap-3 border-l-4" :class="e.activa ? 'border-l-emerald-500' : 'border-l-red-400 opacity-80'">
+      <div class="flex items-start gap-3">
+        <Avatar :icono="Building2" :inactivo="!e.activa" />
+        <div class="grid min-w-0 flex-1 gap-1">
+          <strong class="text-base leading-snug break-words text-brand-900">{{ e.nombre }}</strong>
+          <span class="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
+            <span class="rounded-full px-2.5 py-0.5" :class="e.activa ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'">{{ e.activa ? 'Activa' : 'Desactivada' }}</span>
+            <span class="rounded-full bg-brand-100 px-2.5 py-0.5 text-brand-800">Plan {{ e.plan }}</span>
+            <span class="flex items-center gap-1 rounded-full bg-brand-100 px-2.5 py-0.5 text-brand-800"><Users :size="12" aria-hidden="true" />{{ e.usuarios }} {{ e.usuarios === 1 ? 'usuario' : 'usuarios' }}</span>
+          </span>
+        </div>
+      </div>
+      <div v-if="e.datos?.ruc || e.datos?.telefono || e.datos?.correo" class="grid gap-1 rounded-xl bg-brand-50/70 p-2.5 sm:grid-cols-2">
+        <Dato v-if="e.datos?.ruc" :icono="IdCard" etiqueta="RUC">{{ e.datos.ruc }}</Dato>
+        <Dato v-if="e.datos?.telefono" :icono="Phone" etiqueta="Teléfono">{{ e.datos.telefono }}</Dato>
+        <Dato v-if="e.datos?.correo" :icono="Mail" etiqueta="Correo" ajustar>{{ e.datos.correo }}</Dato>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button class="btn min-h-10 flex-none text-sm" @click="configurando = e"><Settings :size="16" aria-hidden="true" />Configurar</button>
+        <button class="btn-borde min-h-10 text-sm" @click="abrir(e)"><Pencil :size="16" aria-hidden="true" />Datos</button>
+        <button class="btn-borde min-h-10 text-sm" @click="abrirAdmins(e)"><KeyRound :size="16" aria-hidden="true" />Clave del administrador</button>
+        <button class="min-h-10 flex-1 rounded-xl border px-4 text-sm font-semibold sm:flex-none" :class="e.activa ? 'border-red-600 text-red-700' : 'border-emerald-600 text-emerald-700'" @click="alternar(e)">
+          <Power :size="16" class="mr-1.5 inline" aria-hidden="true" />{{ e.activa ? 'Desactivar' : 'Activar' }}
+        </button>
+      </div>
     </li>
   </ul>
 
