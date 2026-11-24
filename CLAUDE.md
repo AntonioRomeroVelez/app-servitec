@@ -34,8 +34,8 @@ node scripts/generar-iconos.mjs                  # regenera los iconos de public
 
 ## Roles
 
-- `superadmin`: todo, incluido Usuarios y Ajustes de la app. El dueño de la empresa (superadmin) también puede atender visitas como un técnico: aparece en la lista de responsables (marcado "administrador"), se asigna visitas a sí mismo y cambia su estado, crea informes y sube fotos (`0012_superadmin_como_tecnico.sql`; `tecnicos_list` devuelve técnicos y superadmins). El rol `admin` no crea usuarios: solo el superadmin de la empresa.
-- `admin`: agenda visitas, ve todo, gestiona clientes, genera el QR de instalación.
+- `superadmin`: todo, incluido Usuarios y Ajustes de la app. El dueño de la empresa (superadmin) también puede atender visitas como un técnico: aparece en la lista de responsables (marcado "administrador"), se asigna visitas a sí mismo y cambia su estado, crea informes y sube fotos (`0012_superadmin_como_tecnico.sql`; `tecnicos_list` devuelve técnicos y superadmins). 
+- `admin`: agenda visitas, ve todo, gestiona clientes, genera el QR de instalación. También crea y administra TÉCNICOS de su empresa (alta, edición de datos, activar/desactivar, restablecer clave), nunca admins ni superadmins ni el rol de nadie (`0013_admin_gestiona_tecnicos.sql`: `crear_usuario`, `restablecer_clave` y la política `perfiles_editar` lo imponen en la base; la app oculta lo demás). Como el superadmin, también puede ser responsable de una visita (`tecnicos_list` devuelve técnicos, admins y superadmins), por si la empresa aún no tiene técnicos.
 - `tecnico`: ve sus visitas; acepta, inicia, finaliza o cancela (transiciones en `TRANSICIONES_TECNICO`), crea informes y sube fotos.
 
 ## Arquitectura

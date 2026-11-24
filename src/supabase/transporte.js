@@ -238,8 +238,8 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
 
     async tecnicos_list() {
       const c = await perfiles()
-      // El superadmin (dueño de la empresa) también puede atender visitas: aparece junto a los técnicos
-      return c.lista.filter((x) => ['tecnico', 'superadmin'].includes(x.rol) && x.activo).map((x) => ({ usuario: x.usuario, nombre: x.nombre, rol: x.rol }))
+      // El superadmin (dueño) y el admin también pueden atender visitas (por si no hay técnicos): aparecen junto a ellos
+      return c.lista.filter((x) => ['tecnico', 'admin', 'superadmin'].includes(x.rol) && x.activo).map((x) => ({ usuario: x.usuario, nombre: x.nombre, rol: x.rol }))
     },
 
     // ---- empresas (solo el superadmin de la plataforma) ----
@@ -305,6 +305,7 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
     // El usuario de ingreso es el indicado (si está libre) o el sugerido; el resultado trae `usuario` para entregárselo
     async usuarios_create({ data: d }) {
       if (!['superadmin', 'admin', 'tecnico'].includes(d.rol)) throw fallo('Elige el rol del usuario')
+      if ((await yo()).rol === 'admin' && d.rol !== 'tecnico') throw fallo('Solo puedes crear técnicos', 'FORBIDDEN')
       const msg = validarPersona(d)
       if (msg) throw fallo(msg)
       // la clave temporal es la cédula (la base la aplica): la persona debe cambiarla en su primer ingreso
@@ -322,7 +323,12 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
       }
       const cambios = {}
       for (const k of ['nombre', 'rol', 'activo', 'correo', 'cedula', 'telefono', 'ciudad', 'direccion', 'cargo']) if (resto[k] !== undefined) cambios[k] = typeof resto[k] === 'string' ? resto[k].trim() : resto[k]
-      if (Object.keys(cambios).length) ok(await sb.from('perfiles').update(cambios).eq('id', id).select().single())
+      if (Object.keys(cambios).length) {
+        // Si la base no deja editarlo (por ejemplo un admin con un superadmin) no devuelve filas: se avisa sin tecnicismos
+        const { data, error } = await sb.from('perfiles').update(cambios).eq('id', id).select().maybeSingle()
+        if (error) throw aError(error)
+        if (!data) throw fallo('Sin permisos', 'FORBIDDEN')
+      }
       invalidar()
       const p = (await perfiles()).porId.get(id)
       if (!p) throw fallo('No encontrado')
@@ -504,7 +510,8 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
         const perfil = await yo() // exige sesión
         if (perfil.cambiar_clave) throw fallo('Debes cambiar tu clave para continuar', 'CAMBIAR_CLAVE')
         if (action.startsWith('empresas_') && !perfil.plataforma) throw fallo('Sin permisos', 'FORBIDDEN')
-        if (action.startsWith('usuarios_') && perfil.rol !== 'superadmin') throw fallo('Sin permisos', 'FORBIDDEN')
+        // Usuarios: el superadmin gestiona a todos; el admin solo a técnicos (la base lo impone; aquí se corta antes)
+        if (action.startsWith('usuarios_') && !['superadmin', 'admin'].includes(perfil.rol)) throw fallo('Sin permisos', 'FORBIDDEN')
         if (action.startsWith('clientes_') && perfil.rol === 'tecnico') throw fallo('Sin permisos', 'FORBIDDEN')
       }
       return await f(payload)

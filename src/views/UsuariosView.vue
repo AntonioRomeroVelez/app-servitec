@@ -16,7 +16,7 @@ import { usePaginaLocal } from '../composables/usePaginaLocal'
 import { call } from '../api'
 
 const { usuarios, cargando, error, cargar, crear, actualizar } = useUsuarios()
-const { usuario: yo } = useAuth()
+const { usuario: yo, esSuper } = useAuth() // el admin solo ve y gestiona técnicos; el superadmin, a todos
 
 const aviso = ref('')
 
@@ -121,6 +121,7 @@ const filtrados = computed(() => {
   const t = normalizar(q.value)
   return usuarios.value.filter(
     (u) =>
+      (esSuper.value || u.rol === 'tecnico') &&
       (!rol.value || u.rol === rol.value) &&
       (!estado.value || (estado.value === 'activos') === u.activo) &&
       (!t || [u.nombre, u.usuario, u.correo, u.cedula, u.ciudad, u.telefono].some((c) => normalizar(c).includes(t))),
@@ -135,7 +136,7 @@ onMounted(() => cargar().catch(() => {}))
 <template>
   <BarraFiltros v-model="q" placeholder="Buscar nombre, usuario, cédula o ciudad" :activos="(rol ? 1 : 0) + (estado ? 1 : 0)">
     <template #filtros>
-      <select v-model="rol" class="campo !min-h-10 !py-1.5 text-sm" aria-label="Filtrar por rol">
+      <select v-if="esSuper" v-model="rol" class="campo !min-h-10 !py-1.5 text-sm" aria-label="Filtrar por rol">
         <option value="">Todos los roles</option>
         <option v-for="r in ROLES" :key="r" :value="r">{{ r }}</option>
       </select>
@@ -159,7 +160,7 @@ onMounted(() => cargar().catch(() => {}))
   <Modal v-if="mostrarForm" :titulo="credenciales ? 'Usuario creado' : 'Nuevo usuario'" @cerrar="cerrarAlta">
     <CredencialesNuevas v-if="credenciales" v-bind="credenciales" @listo="cerrarAlta" />
     <form v-else class="grid gap-3" @submit.prevent="agregar">
-      <FormularioPersona :form="nuevo" :roles="ROLES" nueva-cuenta :usuarios-existentes="usuarios.map((u) => u.usuario)" :sugerir="sugerir" :disponible="disponible" />
+      <FormularioPersona :form="nuevo" :roles="esSuper ? ROLES : null" nueva-cuenta :usuarios-existentes="usuarios.map((u) => u.usuario)" :sugerir="sugerir" :disponible="disponible" />
       <p v-if="aviso || error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso || error }}</p>
       <button class="btn" :disabled="cargando">{{ cargando ? 'Creando…' : 'Crear usuario' }}</button>
     </form>
@@ -173,7 +174,7 @@ onMounted(() => cargar().catch(() => {}))
   <!-- Edición de datos (modal) -->
   <Modal v-if="editando" :titulo="`Datos de @${editando.usuario}`" @cerrar="editando = null">
     <form class="grid gap-3" @submit.prevent="guardarEdicion">
-      <FormularioPersona :form="edicion" :roles="editando.id === yo.id ? null : ROLES" editando />
+      <FormularioPersona :form="edicion" :roles="esSuper && editando.id !== yo.id ? ROLES : null" editando />
       <p class="text-xs text-brand-700/80">El usuario de ingreso (@{{ editando.usuario }}) no cambia aunque se modifique el nombre.</p>
       <p v-if="aviso || error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso || error }}</p>
       <div class="flex gap-2">

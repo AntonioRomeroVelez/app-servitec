@@ -36,7 +36,7 @@ import { ArrowLeft, Bell, Building2, CalendarDays, FileText, LayoutDashboard, Me
 import MenuLateral from './components/MenuLateral.vue'
 import { estado as estadoRed } from './offline/estado'
 
-const { usuario, esSuper, esPlataforma, puedeAgendar, logueado, logout } = useAuth()
+const { usuario, esSuper, esPlataforma, puedeUsuarios, puedeAgendar, logueado, logout } = useAuth()
 const I = useInformes()
 const V = useVisitas()
 const T = useTecnicos()
@@ -335,9 +335,10 @@ const arbol = computed(() => {
         hoja('cliente-nuevo', 'Nuevo cliente', ['clientes'], { opcion: 'nuevo' }),
       ]),
     esPlataforma.value && hoja('empresas', 'Empresas', ['empresas'], { icono: Building2 }),
-    esSuper.value &&
+    puedeUsuarios.value &&
       grupo('administracion', 'Administración', ShieldCheck, [
         hoja('usuarios', 'Usuarios', ['usuarios']),
+        esSuper.value &&
         grupo(
           'ajustes',
           'Ajustes de la app',
@@ -481,7 +482,7 @@ function salirDelMenu() {
       <InstalarView v-else-if="vista === 'instalar'" @continuar="ir('dashboard')" />
       <QrInstalarView v-else-if="vista === 'qr' && puedeAgendar" />
       <ClaveView v-else-if="vista === 'clave'" @listo="ir('dashboard')" />
-      <UsuariosView v-else-if="vista === 'usuarios' && esSuper" />
+      <UsuariosView v-else-if="vista === 'usuarios' && puedeUsuarios" />
       <EmpresasView v-else-if="vista === 'empresas' && esPlataforma" />
     </main>
 

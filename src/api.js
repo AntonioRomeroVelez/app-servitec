@@ -257,7 +257,7 @@ function guardarConfigDemo(seccion, p) {
 }
 
 function validarResponsable(r, us) {
-  if (r && !us.some((x) => x.usuario === r && x.activo && ['tecnico', 'superadmin'].includes(x.rol))) throw error('Técnico inválido')
+  if (r && !us.some((x) => x.usuario === r && x.activo && ['tecnico', 'admin', 'superadmin'].includes(x.rol))) throw error('Técnico inválido')
 }
 
 async function demo(action, p, token) {
@@ -292,7 +292,7 @@ async function demo(action, p, token) {
   }
   // Mientras la clave sea temporal, nada más funciona
   if (yo.cambiarClave) throw error('Debes cambiar tu clave para continuar', 'CAMBIAR_CLAVE')
-  if (action === 'tecnicos_list') return us.filter((x) => ['tecnico', 'superadmin'].includes(x.rol) && x.activo).map((x) => ({ usuario: x.usuario, nombre: x.nombre, rol: x.rol }))
+  if (action === 'tecnicos_list') return us.filter((x) => ['tecnico', 'admin', 'superadmin'].includes(x.rol) && x.activo).map((x) => ({ usuario: x.usuario, nombre: x.nombre, rol: x.rol }))
 
   if (action === 'notificaciones_list') {
     const mias = leer(LS_N, []).filter((n) => n.usuario === yo.usuario)
@@ -493,7 +493,14 @@ async function demo(action, p, token) {
     }
   }
 
-  if (!esSuper) throw error('Sin permisos', 'FORBIDDEN')
+  // Usuarios: el admin solo gestiona técnicos; el resto de esta zona es del superadmin
+  if (yo.rol === 'admin' && action.startsWith('usuarios_')) {
+    if (action === 'usuarios_create' && p.data?.rol !== 'tecnico') throw error('Solo puedes crear técnicos', 'FORBIDDEN')
+    if (action === 'usuarios_update') {
+      const objetivo = us.find((x) => x.id === p.id)
+      if (!objetivo || objetivo.rol !== 'tecnico' || (p.data?.rol && p.data.rol !== 'tecnico')) throw error('Sin permisos', 'FORBIDDEN')
+    }
+  } else if (!esSuper) throw error('Sin permisos', 'FORBIDDEN')
   switch (action) {
     case 'configuracion_update':
       return guardarConfigDemo(p.seccion, p)
