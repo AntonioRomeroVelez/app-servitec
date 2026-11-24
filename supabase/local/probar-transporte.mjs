@@ -88,6 +88,13 @@ const v = await A.call('visitas_create', { data: { fecha: manana, hora: '09:30',
 ok(v.hora === '09:30' && v.responsable === tec.usuario && v.autor === ea.usuario && v.estado === 'Programada' && v.clienteId, 'visitas_create devuelve la forma de la app (usuarios por nombre, cliente registrado)', JSON.stringify(v))
 const v2 = await A.call('visitas_create', { data: { id: v.id, fecha: manana, hora: '09:30', cliente: 'Ferretería Sol', tipo: 'Inspección', responsable: tec.usuario } })
 ok(v2.id === v.id, 'repetir la creación con el mismo id no duplica')
+const listaTec = await A.call('tecnicos_list')
+ok(listaTec.some((t) => t.usuario === ea.usuario && t.rol === 'superadmin') && listaTec.some((t) => t.usuario === tec.usuario && t.rol === 'tecnico'), 'tecnicos_list incluye al superadmin (dueño) junto a los técnicos')
+const vDueno = await A.call('visitas_create', { data: { fecha: manana, hora: '11:00', cliente: 'Ferretería Sol', tipo: 'Inspección', responsable: ea.usuario } })
+ok(vDueno.responsable === ea.usuario, 'el superadmin puede asignarse una visita a sí mismo')
+const vDueno2 = await A.call('visitas_update', { id: vDueno.id, data: { estado: 'En curso' } })
+ok(vDueno2.estado === 'En curso', 'el superadmin cambia el estado de su propia visita')
+await A.call('visitas_delete', { id: vDueno.id }) // no altera los totales de las pruebas siguientes
 await rechaza(() => A.call('visitas_create', { data: { fecha: manana, hora: '10:00', cliente: 'X', tipo: 'Inspección', responsable: 'nadie' } }), 'responsable inexistente', /Técnico inválido/)
 const lista = await A.call('visitas_list', { desde: manana, orden: 'asc' })
 ok(lista.items.length === 1 && lista.total === 1 && lista.antes === 0, 'visitas_list con filtros y total')

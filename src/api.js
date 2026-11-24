@@ -257,7 +257,7 @@ function guardarConfigDemo(seccion, p) {
 }
 
 function validarResponsable(r, us) {
-  if (r && !us.some((x) => x.usuario === r && x.activo && x.rol === 'tecnico')) throw error('Técnico inválido')
+  if (r && !us.some((x) => x.usuario === r && x.activo && ['tecnico', 'superadmin'].includes(x.rol))) throw error('Técnico inválido')
 }
 
 async function demo(action, p, token) {
@@ -292,7 +292,7 @@ async function demo(action, p, token) {
   }
   // Mientras la clave sea temporal, nada más funciona
   if (yo.cambiarClave) throw error('Debes cambiar tu clave para continuar', 'CAMBIAR_CLAVE')
-  if (action === 'tecnicos_list') return us.filter((x) => x.rol === 'tecnico' && x.activo).map((x) => ({ usuario: x.usuario, nombre: x.nombre }))
+  if (action === 'tecnicos_list') return us.filter((x) => ['tecnico', 'superadmin'].includes(x.rol) && x.activo).map((x) => ({ usuario: x.usuario, nombre: x.nombre, rol: x.rol }))
 
   if (action === 'notificaciones_list') {
     const mias = leer(LS_N, []).filter((n) => n.usuario === yo.usuario)

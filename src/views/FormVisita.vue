@@ -111,7 +111,7 @@ function alEscribirCliente() {
       <label class="etiqueta">Técnico asignado
         <select v-model="form.responsable" class="campo">
           <option value="">Sin asignar</option>
-          <option v-for="t in tecnicos" :key="t.usuario" :value="t.usuario">{{ t.nombre }}</option>
+          <option v-for="t in tecnicos" :key="t.usuario" :value="t.usuario">{{ t.nombre }}<template v-if="t.rol === 'superadmin'"> (administrador)</template></option>
           <!-- valor previo que ya no es un técnico activo, para no perderlo al editar -->
           <option v-if="form.responsable && !tecnicos.some((t) => t.usuario === form.responsable)" :value="form.responsable">{{ form.responsable }}</option>
         </select>
