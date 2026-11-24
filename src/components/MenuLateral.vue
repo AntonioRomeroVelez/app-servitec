@@ -73,10 +73,11 @@ function alTeclear(e) {
             <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-base font-bold">{{ (usuario.nombre || usuario.usuario).charAt(0).toUpperCase() }}</span>
             <div class="min-w-0">
               <p class="truncate text-sm font-semibold">{{ usuario.nombre }}</p>
-              <p class="flex items-center gap-1.5 text-xs text-brand-100">
+              <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-brand-100">
                 @{{ usuario.usuario }}
-                <span class="rounded-full bg-acento px-2 py-px text-[10px] font-bold text-acento-texto">{{ usuario.rol }}</span>
+                <span class="rounded-full bg-acento px-2 py-px text-[10px] font-bold text-acento-texto">{{ usuario.plataforma ? 'Dueño de la plataforma' : usuario.rol }}</span>
               </p>
+              <p v-if="usuario.plataforma" class="mt-0.5 text-[11px] text-brand-100/80">Superadmin global · también {{ usuario.rol }} de su empresa</p>
             </div>
           </div>
         </div>
