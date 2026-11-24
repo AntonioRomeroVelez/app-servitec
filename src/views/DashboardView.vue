@@ -1,10 +1,12 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { CalendarPlus, CalendarDays, FilePlus2, Building2, TriangleAlert, RefreshCw } from 'lucide-vue-next'
+import { CalendarPlus, CalendarDays, FilePlus2, Building2, TriangleAlert, RefreshCw, Wrench } from 'lucide-vue-next'
 import { call } from '../api'
 import { useAuth } from '../composables/useAuth'
 import { useConfiguracion } from '../composables/useConfiguracion'
 import EstadoBadge from '../components/EstadoBadge.vue'
+import Dato from '../components/Dato.vue'
+import { bordeDeEstado } from '../estados'
 import GraficoBarras from '../components/GraficoBarras.vue'
 import { fechaLarga, hoy, manana } from '../utils'
 
@@ -139,11 +141,11 @@ const pl = computed(() => datos.value?.plataforma)
             <button class="text-xs font-semibold text-brand-700 underline" @click="$emit('agenda', 'proximas')">Ver agenda</button>
           </div>
           <p v-if="!datos.proximasLista.length" class="py-3 text-sm text-brand-700/70">No hay visitas pendientes.</p>
-          <ul v-else class="divide-y divide-brand-100">
+          <ul v-else class="grid gap-2">
             <li v-for="v in datos.proximasLista" :key="v.id">
-              <button class="flex w-full items-center gap-3 py-2 text-left" @click="$emit('visita', v.id)">
-                <span class="w-14 shrink-0 text-xs leading-tight text-brand-700"><b class="block text-sm text-brand-900">{{ v.hora.slice(0, 5) }}</b>{{ etiquetaDia(v.fecha) }}</span>
-                <span class="min-w-0 flex-1"><b class="block truncate text-sm text-brand-900">{{ v.cliente }}</b><span class="block truncate text-xs text-brand-700">{{ v.tipo }}</span></span>
+              <button class="flex w-full items-center gap-3 rounded-xl border-l-4 bg-brand-50/70 px-3 py-2 text-left active:bg-brand-100" :class="bordeDeEstado(v.estado)" @click="$emit('visita', v.id)">
+                <span class="w-14 shrink-0 text-xs leading-tight text-brand-700"><b class="block text-base text-brand-900">{{ v.hora.slice(0, 5) }}</b>{{ etiquetaDia(v.fecha) }}</span>
+                <span class="grid min-w-0 flex-1 gap-0.5"><b class="truncate text-sm text-brand-900">{{ v.cliente }}</b><Dato :icono="Wrench" etiqueta="Tipo">{{ v.tipo }}</Dato></span>
                 <EstadoBadge :estado="v.estado" />
               </button>
             </li>
@@ -157,10 +159,14 @@ const pl = computed(() => datos.value?.plataforma)
             <button class="text-xs font-semibold text-brand-700 underline" @click="$emit('informes', '')">Ver todos</button>
           </div>
           <p v-if="!datos.ultimosInformes.length" class="py-3 text-sm text-brand-700/70">Todavía no hay informes.</p>
-          <ul v-else class="divide-y divide-brand-100">
+          <ul v-else class="grid gap-2">
             <li v-for="i in datos.ultimosInformes" :key="i.id">
-              <button class="flex w-full items-center gap-3 py-2 text-left" @click="$emit('informe', i.id)">
-                <span class="min-w-0 flex-1"><b class="block truncate text-sm text-brand-900">{{ i.titulo }}</b><span class="block truncate text-xs text-brand-700">{{ i.numero || 'Sin número' }} · {{ i.cliente }}</span></span>
+              <button class="flex w-full items-center gap-3 rounded-xl border-l-4 bg-brand-50/70 px-3 py-2 text-left active:bg-brand-100" :class="bordeDeEstado(i.estado)" @click="$emit('informe', i.id)">
+                <span class="grid min-w-0 flex-1 gap-0.5">
+                  <span class="font-mono text-[11px] font-semibold text-brand-600">{{ i.numero || 'Sin número' }}</span>
+                  <b class="truncate text-sm text-brand-900">{{ i.titulo }}</b>
+                  <Dato :icono="Building2" etiqueta="Cliente">{{ i.cliente }}</Dato>
+                </span>
                 <EstadoBadge :estado="i.estado" />
               </button>
             </li>

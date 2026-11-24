@@ -50,7 +50,7 @@ onMounted(cargar)
 
   <ul class="grid gap-2.5">
     <li v-for="n in pag.visibles.value" :key="n.id">
-      <button class="tarjeta flex w-full gap-3 text-left active:bg-brand-50" :class="n.leida ? '' : 'border-brand-300 bg-brand-50'" @click="abrir(n)">
+      <button class="tarjeta flex w-full gap-3 border-l-4 text-left active:bg-brand-50" :class="n.leida ? 'border-l-brand-100' : 'border-l-acento bg-brand-50'" @click="abrir(n)">
         <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full" :class="n.leida ? 'bg-brand-100 text-brand-700' : 'bg-brand-600 text-white'">
           <component :is="ICONOS[n.tipo] || Bell" :size="18" aria-hidden="true" />
         </span>
@@ -61,7 +61,7 @@ onMounted(cargar)
           </span>
           <span class="text-sm whitespace-pre-line text-brand-800">{{ n.mensaje }}</span>
         </span>
-        <span v-if="!n.leida" class="mt-2 size-2.5 shrink-0 rounded-full bg-acento" aria-label="Sin leer" />
+        <span v-if="!n.leida" class="mt-0.5 h-fit shrink-0 rounded-full bg-acento px-2 py-0.5 text-[11px] font-bold text-acento-texto">Nueva</span>
       </button>
     </li>
   </ul>

@@ -5,7 +5,9 @@ import { useFotos } from '../composables/useFotos'
 import { useAuth } from '../composables/useAuth'
 import { useToast } from '../composables/useToast'
 import EstadoBadge from '../components/EstadoBadge.vue'
-import { CloudUpload, FileDown, Loader } from 'lucide-vue-next'
+import Dato from '../components/Dato.vue'
+import { bordeDeEstado } from '../estados'
+import { Building2, CalendarDays, CloudUpload, FileDown, Loader, Tag, UserPen, UserRound } from 'lucide-vue-next'
 import { fechaCorta } from '../utils'
 import { medirImagen } from '../imagen'
 import { useConfiguracion } from '../composables/useConfiguracion'
@@ -20,7 +22,7 @@ const toast = useToast()
 
 const checklist = computed(() => leerChecklist(props.informe.checklist))
 const textoResultado = (id) => RESULTADOS.find((r) => r.id === id)?.texto ?? 'Sin responder'
-const claseResultado = (id) => ({ ok: 'text-emerald-700', falla: 'text-red-700', na: 'text-brand-700' })[id] ?? 'text-brand-700/60'
+const claseResultado = (id) => ({ ok: 'bg-emerald-100 text-emerald-800', falla: 'bg-red-100 text-red-800', na: 'bg-brand-100 text-brand-800' })[id] ?? 'bg-brand-50 text-brand-700/70'
 
 // Finalizado = cerrado: solo el superadmin puede editarlo o eliminarlo
 const cerrado = computed(() => props.informe.estado === 'Finalizado' && !esSuper.value)
@@ -69,9 +71,9 @@ async function descargarPdf() {
 </script>
 
 <template>
-  <article class="tarjeta grid gap-3">
+  <article class="tarjeta grid gap-3 border-l-4" :class="bordeDeEstado(informe.estado)">
     <p class="flex items-center gap-2 text-sm font-semibold text-brand-700">
-      <span>{{ informe.numero || 'Número pendiente: se asigna al enviarse' }}</span>
+      <span class="rounded-md bg-brand-50 px-2 py-0.5 font-mono text-xs">{{ informe.numero || 'Número pendiente: se asigna al enviarse' }}</span>
       <span v-if="informe._pendiente" class="flex items-center gap-1 text-xs"><CloudUpload :size="14" aria-hidden="true" />Sin enviar</span>
     </p>
     <div class="flex items-start justify-between gap-2">
@@ -79,13 +81,13 @@ async function descargarPdf() {
       <EstadoBadge :estado="informe.estado" />
     </div>
 
-    <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-      <dt class="text-brand-700/70">Cliente</dt><dd>{{ informe.cliente }}</dd>
-      <dt class="text-brand-700/70">Fecha</dt><dd>{{ fechaCorta(informe.fecha) }}</dd>
-      <dt class="text-brand-700/70">Tipo</dt><dd>{{ informe.tipo }}</dd>
-      <dt class="text-brand-700/70">Responsable</dt><dd>{{ informe.responsable || '—' }}</dd>
-      <dt class="text-brand-700/70">Elaborado por</dt><dd>{{ informe.autor }}</dd>
-    </dl>
+    <div class="grid gap-2 rounded-xl border border-brand-100 p-3 sm:grid-cols-2">
+      <Dato :icono="Building2" etiqueta="Cliente" ajustar>{{ informe.cliente }}</Dato>
+      <Dato :icono="CalendarDays" etiqueta="Fecha">{{ fechaCorta(informe.fecha) }}</Dato>
+      <Dato :icono="Tag" etiqueta="Tipo" ajustar>{{ informe.tipo }}</Dato>
+      <Dato :icono="UserRound" etiqueta="Responsable" ajustar>{{ informe.responsable || 'Sin responsable' }}</Dato>
+      <Dato :icono="UserPen" etiqueta="Elaborado por" ajustar>Elaborado por {{ informe.autor }}</Dato>
+    </div>
 
     <section v-if="checklist.length" class="grid gap-1.5">
       <h3 class="font-semibold text-brand-800">Checklist</h3>
@@ -95,7 +97,7 @@ async function descargarPdf() {
             {{ c.item }}
             <span v-if="c.obs" class="block text-xs text-brand-700/80">Obs.: {{ c.obs }}</span>
           </span>
-          <b class="shrink-0" :class="claseResultado(c.resultado)">{{ textoResultado(c.resultado) }}</b>
+          <b class="shrink-0 rounded-full px-2.5 py-0.5 text-xs" :class="claseResultado(c.resultado)">{{ textoResultado(c.resultado) }}</b>
         </li>
       </ul>
     </section>

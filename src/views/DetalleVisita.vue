@@ -4,7 +4,9 @@ import { ESTADOS_VISITA, TRANSICIONES_TECNICO, ESTADOS_CON_INFORME } from '../co
 import { fechaLarga } from '../utils'
 import EstadoBadge from '../components/EstadoBadge.vue'
 import FotosVisita from '../components/FotosVisita.vue'
-import { Navigation, Phone, Plus } from 'lucide-vue-next'
+import Dato from '../components/Dato.vue'
+import { bordeDeEstado } from '../estados'
+import { CalendarDays, CalendarPlus, MapPin, Navigation, Phone, Plus, UserRound, Wrench } from 'lucide-vue-next'
 
 const props = defineProps({
   visita: { type: Object, required: true },
@@ -47,13 +49,16 @@ function cambiarSelect(e) {
 </script>
 
 <template>
-  <article class="tarjeta grid gap-3">
+  <article class="tarjeta grid gap-3 border-l-4" :class="bordeDeEstado(visita.estado)">
     <div class="flex items-start justify-between gap-2">
       <h2 class="text-xl font-bold text-brand-900">{{ visita.cliente }}</h2>
       <EstadoBadge :estado="visita.estado" />
     </div>
 
-    <p class="text-lg font-semibold text-brand-700 first-letter:uppercase">{{ fechaLarga(visita.fecha) }} · {{ visita.hora }}</p>
+    <p class="flex items-center gap-2 rounded-xl bg-brand-50 px-3 py-2 text-base font-semibold text-brand-800 first-letter:uppercase">
+      <CalendarDays :size="20" class="shrink-0 text-brand-600" aria-hidden="true" />
+      <span>{{ fechaLarga(visita.fecha) }} · {{ visita.hora }}</span>
+    </p>
 
     <p v-if="visita.estado === 'Cancelada' && visita.motivo" class="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800">
       <b>Motivo de la cancelación:</b> {{ visita.motivo }}
@@ -64,13 +69,13 @@ function cambiarSelect(e) {
       <a v-if="visita.direccion" :href="mapa" target="_blank" rel="noopener" class="btn-borde min-h-11"><Navigation :size="18" aria-hidden="true" />Cómo llegar</a>
     </div>
 
-    <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-      <dt class="text-brand-700/70">Tipo</dt><dd>{{ visita.tipo }}</dd>
-      <dt class="text-brand-700/70">Dirección</dt><dd>{{ visita.direccion || '—' }}</dd>
-      <dt class="text-brand-700/70">Teléfono</dt><dd>{{ visita.telefono || '—' }}</dd>
-      <dt class="text-brand-700/70">Técnico</dt><dd>{{ visita.responsable ? nombreDe(visita.responsable) : 'Sin asignar' }}</dd>
-      <dt class="text-brand-700/70">Agendada por</dt><dd>{{ visita.autor }}</dd>
-    </dl>
+    <div class="grid gap-2 rounded-xl border border-brand-100 p-3">
+      <Dato :icono="Wrench" etiqueta="Tipo" ajustar>{{ visita.tipo }}</Dato>
+      <Dato :icono="MapPin" etiqueta="Dirección" ajustar>{{ visita.direccion || 'Sin dirección' }}</Dato>
+      <Dato :icono="Phone" etiqueta="Teléfono" ajustar>{{ visita.telefono || 'Sin teléfono' }}</Dato>
+      <Dato :icono="UserRound" etiqueta="Responsable" ajustar>{{ visita.responsable ? nombreDe(visita.responsable) : 'Sin asignar' }}</Dato>
+      <Dato :icono="CalendarPlus" etiqueta="Agendada por" ajustar>Agendada por {{ visita.autor }}</Dato>
+    </div>
 
     <template v-if="visita.notas">
       <h3 class="font-semibold text-brand-800">Notas</h3>
@@ -109,7 +114,7 @@ function cambiarSelect(e) {
 
     <section class="grid gap-2 border-t border-brand-100 pt-3">
       <h3 class="font-semibold text-brand-800">Informes de esta visita</h3>
-      <button v-for="i in informes" :key="i.id" class="flex items-center justify-between gap-2 rounded-xl bg-brand-50 p-3 text-left" @click="$emit('abrirInforme', i.id)">
+      <button v-for="i in informes" :key="i.id" class="flex items-center justify-between gap-2 rounded-xl border-l-4 bg-brand-50 p-3 text-left active:bg-brand-100" :class="bordeDeEstado(i.estado)" @click="$emit('abrirInforme', i.id)">
         <span class="font-medium text-brand-900">{{ i.titulo }}</span>
         <EstadoBadge :estado="i.estado" />
       </button>
