@@ -3,6 +3,7 @@ import { ref, reactive, computed, watch, onMounted } from 'vue'
 import { Building2, KeyRound, Pencil, Plus, Power, Settings, X } from 'lucide-vue-next'
 import { call } from '../api'
 import { useToast } from '../composables/useToast'
+import { confirmar } from '../composables/useConfirmar'
 import { normalizar, validarClave } from '../utils'
 import CampoClave from '../components/CampoClave.vue'
 import { personaVacia, validarPersona, limpiarPersona } from '../persona'
@@ -134,6 +135,8 @@ async function restablecerAdmin(a) {
     const msg = validarClave(clave, a.usuario)
     if (msg) return (errorAdmins.value = msg)
   }
+  const quien = `${a.nombre} (@${a.usuario})`
+  if (!(await confirmar({ titulo: '¿Restablecer la clave?', texto: `Se cerrarán las sesiones de ${quien} y deberá crear una clave nueva al ingresar.`, confirmar: 'Restablecer', peligro: true }))) return
   try {
     await call('empresas_restablecer_admin', { id: a.id, clave, temporal: !manual })
     claveRestablecida.value = { nombre: a.nombre, usuario: a.usuario, clave }
@@ -145,6 +148,12 @@ async function restablecerAdmin(a) {
 }
 
 async function alternar(e) {
+  const ok = await confirmar(
+    e.activa
+      ? { titulo: `¿Desactivar "${e.nombre}"?`, texto: 'Todos sus usuarios dejarán de poder entrar hasta que la actives de nuevo. Sus datos no se borran.', confirmar: 'Desactivar', peligro: true }
+      : { titulo: `¿Activar "${e.nombre}"?`, texto: 'Sus usuarios podrán volver a entrar.', confirmar: 'Activar' },
+  )
+  if (!ok) return
   try {
     await call('empresas_update', { id: e.id, data: { activa: !e.activa } })
     toast.exito(e.activa ? `"${e.nombre}" desactivada: sus usuarios ya no pueden entrar.` : `"${e.nombre}" activada.`)

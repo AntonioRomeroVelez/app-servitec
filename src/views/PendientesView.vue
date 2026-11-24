@@ -1,4 +1,5 @@
 <script setup>
+import { confirmar } from '../composables/useConfirmar'
 import { ref, watch, onMounted } from 'vue'
 import { RefreshCw, RotateCcw, Trash2, CloudUpload, CircleAlert, CheckCheck } from 'lucide-vue-next'
 import { offline } from '../api'
@@ -28,7 +29,7 @@ async function reintentar(op) {
 }
 
 async function descartar(op) {
-  if (!confirm('¿Descartar este cambio? No se enviará al servidor y se perderá lo que hiciste.')) return
+  if (!(await confirmar({ titulo: '¿Descartar este cambio?', texto: 'No se enviará al servidor y se perderá lo que hiciste.', confirmar: 'Descartar', peligro: true }))) return
   await offline.descartar(op.n)
   await cargar()
 }

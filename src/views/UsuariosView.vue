@@ -3,6 +3,7 @@ import { reactive, ref, computed, watch, onMounted } from 'vue'
 import { Plus, KeyRound, Pencil, Phone, MapPin, Mail } from 'lucide-vue-next'
 import { useUsuarios } from '../composables/useUsuarios'
 import { useAuth, ROLES } from '../composables/useAuth'
+import { confirmar } from '../composables/useConfirmar'
 import { validarClave, normalizar, generarUsuario } from '../utils'
 import { personaVacia, validarPersona, limpiarPersona } from '../persona'
 import CampoClave from '../components/CampoClave.vue'
@@ -72,7 +73,15 @@ async function guardarEdicion() {
   }
 }
 
-const alternar = (u) => actualizar(u.id, { activo: !u.activo }).catch(() => {})
+async function alternar(u) {
+  const ok = await confirmar(
+    u.activo
+      ? { titulo: `¿Desactivar a ${u.nombre}?`, texto: 'No podrá ingresar a la app hasta que lo actives de nuevo.', confirmar: 'Desactivar', peligro: true }
+      : { titulo: `¿Activar a ${u.nombre}?`, texto: 'Podrá volver a ingresar a la app.', confirmar: 'Activar' },
+  )
+  if (!ok) return
+  actualizar(u.id, { activo: !u.activo }).catch(() => {})
+}
 
 // Restablecer clave: si el usuario tiene cédula vuelve a ser su cédula (clave temporal) con un toque; si no la tiene
 // (cuentas antiguas), se escribe una clave temporal dentro de la tarjeta.
@@ -93,6 +102,7 @@ async function restablecer(u) {
     aviso.value = validarClave(clave, u.usuario)
     if (aviso.value) return
   }
+  if (!(await confirmar({ titulo: '¿Restablecer la clave?', texto: `Se cerrarán las sesiones de ${u.nombre} y deberá crear una clave nueva al ingresar.`, confirmar: 'Restablecer', peligro: true }))) return
   try {
     await actualizar(u.id, { clave, temporal: conCedula })
     restableciendoId.value = null

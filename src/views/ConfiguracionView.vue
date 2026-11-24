@@ -2,6 +2,7 @@
 import { reactive, ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { Building2, Palette, FileText, ListChecks, ImagePlus, Trash2, RotateCcw, Save, ArrowUp, ArrowDown, Plus, Check, ChevronDown, ChevronUp, CircleAlert } from 'lucide-vue-next'
 import { useToast } from '../composables/useToast'
+import { confirmar } from '../composables/useConfirmar'
 import { useConfiguracion } from '../composables/useConfiguracion'
 import { TEMAS_PREDEFINIDOS, contraste } from '../tema'
 import { procesarLogo } from '../imagen'
@@ -81,8 +82,8 @@ const guardarAjena = async (seccion, data, restablecer = false) => {
 }
 const guardar = (seccion, data) =>
   ejecutar(seccion, () => (ajena.value ? guardarAjena(seccion, data) : C.guardar(seccion, data)), 'Cambios guardados. Ya los ven todos los usuarios.')
-const restablecer = (seccion, nombre) => {
-  if (!confirm(`¿Volver a los valores de fábrica en "${nombre}"?`)) return
+const restablecer = async (seccion, nombre) => {
+  if (!(await confirmar({ titulo: `¿Volver a los valores de fábrica en "${nombre}"?`, texto: 'Se pierde lo personalizado en esta sección.', confirmar: 'Restablecer', peligro: true }))) return
   ejecutar(seccion, () => (ajena.value ? guardarAjena(seccion, undefined, true) : C.restablecer(seccion)), 'Se restablecieron los valores de fábrica.')
 }
 

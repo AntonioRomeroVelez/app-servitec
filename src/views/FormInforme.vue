@@ -5,6 +5,7 @@ import { useConfiguracion } from '../composables/useConfiguracion'
 import { nuevoChecklist, leerChecklist, sinResponder, fallasSinObs, RESULTADOS } from '../plantillas'
 import FirmaPad from '../components/FirmaPad.vue'
 import { hoy } from '../utils'
+import { confirmar } from '../composables/useConfirmar'
 
 // `inicial` = edición de un informe existente; `prefill` = datos sugeridos al crear desde una visita
 const props = defineProps({ inicial: Object, prefill: Object, cargando: Boolean })
@@ -39,13 +40,17 @@ watch(
   },
 )
 
-function enviar() {
+async function enviar() {
   error.value = ''
   if (form.estado === 'Finalizado') {
     const pend = sinResponder(checklist.value)
     const fallas = fallasSinObs(checklist.value)
     if (pend) return (error.value = `Para finalizar responde todo el checklist (faltan ${pend}).`)
     if (fallas) return (error.value = `Describe en observaciones cada ítem con falla (faltan ${fallas}).`)
+  }
+  if (form.estado === 'Finalizado' && props.inicial?.estado !== 'Finalizado') {
+    const ok = await confirmar({ titulo: '¿Finalizar el informe?', texto: 'Una vez finalizado solo el superadmin podrá modificarlo.', confirmar: 'Finalizar' })
+    if (!ok) return
   }
   emit('guardar', { ...form, checklist: checklist.value.length ? JSON.stringify(checklist.value) : '' })
 }

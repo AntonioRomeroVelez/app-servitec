@@ -1,29 +1,13 @@
-import { reactive } from 'vue'
+import { toast } from 'vue-sonner'
 
-// Notificaciones emergentes (toast). Estado global compartido: se muestran en ToastContenedor.vue.
-const toasts = reactive([])
-let siguiente = 1
-
-function quitar(id) {
-  const i = toasts.findIndex((t) => t.id === id)
-  if (i >= 0) toasts.splice(i, 1)
-}
-
-function agregar(tipo, texto, duracion) {
-  if (!texto) return
-  const id = siguiente++
-  toasts.push({ id, tipo, texto })
-  // Los errores duran más para dar tiempo de leerlos
-  setTimeout(() => quitar(id), duracion ?? (tipo === 'error' ? 6000 : 3500))
-  return id
-}
+// Notificaciones emergentes con vue-sonner. El contenedor (<Toaster />) está montado en App.vue.
+// Los errores duran más para dar tiempo de leerlos.
+const aviso = (funcion, texto, duracion, porDefecto) => (texto ? funcion(texto, { duration: duracion ?? porDefecto }) : undefined)
 
 export function useToast() {
   return {
-    toasts,
-    quitar,
-    exito: (texto, d) => agregar('exito', texto, d),
-    error: (texto, d) => agregar('error', texto, d),
-    info: (texto, d) => agregar('info', texto, d),
+    exito: (texto, d) => aviso(toast.success, texto, d, 3500),
+    error: (texto, d) => aviso(toast.error, texto, d, 6000),
+    info: (texto, d) => aviso(toast.info, texto, d, 3500),
   }
 }

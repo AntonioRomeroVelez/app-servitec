@@ -1,4 +1,5 @@
 <script setup>
+import { confirmar } from '../composables/useConfirmar'
 import { ref, reactive, watch, onMounted, onBeforeUnmount } from 'vue'
 import { CalendarPlus, ChevronDown, ChevronUp, MapPin, Pencil, Phone, Plus, Trash2, X } from 'lucide-vue-next'
 import { call } from '../api'
@@ -48,7 +49,7 @@ async function guardar() {
 }
 
 async function eliminar(c) {
-  if (!confirm(`¿Eliminar a "${c.nombre}"? Solo se puede si no tiene visitas registradas.`)) return
+  if (!(await confirmar({ titulo: `¿Eliminar a "${c.nombre}"?`, texto: 'Solo se puede si no tiene visitas registradas.', confirmar: 'Eliminar', peligro: true }))) return
   C.eliminar(c.id).catch(() => {})
 }
 

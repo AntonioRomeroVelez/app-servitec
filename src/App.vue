@@ -29,7 +29,8 @@ import InstalarView from './views/InstalarView.vue'
 import QrInstalarView from './views/QrInstalarView.vue'
 import { useInstalacion } from './composables/useInstalacion'
 import BarraConexion from './components/BarraConexion.vue'
-import ToastContenedor from './components/ToastContenedor.vue'
+import { Toaster } from 'vue-sonner'
+import { confirmar } from './composables/useConfirmar'
 import { useToast } from './composables/useToast'
 import { ArrowLeft, Bell, Building2, CalendarDays, FileText, LayoutDashboard, Menu, Plus, QrCode, Settings, ShieldCheck, Smartphone, UserRound } from 'lucide-vue-next'
 import MenuLateral from './components/MenuLateral.vue'
@@ -192,7 +193,7 @@ async function crearVisita(data) {
 const cambiarEstadoVisita = (datos) => V.actualizar(seleccionadoId.value, datos).catch(() => {})
 
 async function borrarVisita() {
-  if (!confirm('¿Eliminar esta visita? Sus fotos irán a la papelera de Drive. Sus informes no se borran.')) return
+  if (!(await confirmar({ titulo: '¿Eliminar esta visita?', texto: 'Sus fotos irán a la papelera de Drive. Sus informes no se borran.', confirmar: 'Eliminar', peligro: true }))) return
   try {
     await V.eliminar(seleccionadoId.value)
     ir('agenda')
@@ -237,7 +238,7 @@ async function crearInforme(data) {
 }
 
 async function borrarInforme() {
-  if (!confirm('¿Eliminar este informe?')) return
+  if (!(await confirmar({ titulo: '¿Eliminar este informe?', texto: 'Esta acción no se puede deshacer.', confirmar: 'Eliminar', peligro: true }))) return
   try {
     await I.eliminar(seleccionadoId.value)
     ir('informes')
@@ -423,7 +424,7 @@ function salirDelMenu() {
 
     <BarraConexion @ver="ir('pendientes')" />
     <p v-if="modoDemo" class="print:hidden bg-acento/90 px-4 py-1.5 text-xs text-acento-texto">Modo demo: datos solo en este dispositivo. Configura <code>VITE_SCRIPT_URL</code> para usar Google Sheets.</p>
-    <ToastContenedor />
+    <Toaster position="top-center" rich-colors close-button :visible-toasts="3" class="print:hidden" />
 
     <main class="mx-auto max-w-3xl px-4 pt-3 pb-24 print:max-w-none print:p-0">
       <!-- Agenda -->

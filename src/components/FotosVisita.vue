@@ -1,4 +1,5 @@
 <script setup>
+import { confirmar } from '../composables/useConfirmar'
 import { ref, computed, onMounted } from 'vue'
 import { useFotos } from '../composables/useFotos'
 import { useAuth } from '../composables/useAuth'
@@ -61,7 +62,7 @@ async function abrir(foto) {
 }
 
 async function borrar() {
-  if (!confirm('¿Eliminar esta foto?')) return
+  if (!(await confirmar({ titulo: '¿Eliminar esta foto?', texto: 'Irá a la papelera de Drive.', confirmar: 'Eliminar', peligro: true }))) return
   try {
     await eliminar(props.visitaId, visor.value.foto.id)
     visor.value = null
