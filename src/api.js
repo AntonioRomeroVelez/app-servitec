@@ -292,7 +292,7 @@ async function demo(action, p, token) {
   }
   // Mientras la clave sea temporal, nada más funciona
   if (yo.cambiarClave) throw error('Debes cambiar tu clave para continuar', 'CAMBIAR_CLAVE')
-  if (action === 'tecnicos_list') return us.filter((x) => ['tecnico', 'admin', 'superadmin'].includes(x.rol) && x.activo).map((x) => ({ usuario: x.usuario, nombre: x.nombre, rol: x.rol }))
+  if (action === 'tecnicos_list') return us.filter((x) => (yo.rol === 'admin' ? ['tecnico', 'admin'] : ['tecnico', 'admin', 'superadmin']).includes(x.rol) && x.activo).map((x) => ({ usuario: x.usuario, nombre: x.nombre, rol: x.rol }))
 
   if (action === 'notificaciones_list') {
     const mias = leer(LS_N, []).filter((n) => n.usuario === yo.usuario)

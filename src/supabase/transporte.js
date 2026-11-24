@@ -238,8 +238,10 @@ export function crearTransporte({ url, anonKey, storage, fotosUrl, llamarFotos }
 
     async tecnicos_list() {
       const c = await perfiles()
-      // El superadmin (dueño) y el admin también pueden atender visitas (por si no hay técnicos): aparecen junto a ellos
-      return c.lista.filter((x) => ['tecnico', 'admin', 'superadmin'].includes(x.rol) && x.activo).map((x) => ({ usuario: x.usuario, nombre: x.nombre, rol: x.rol }))
+      const soyAdmin = (await yo()).rol === 'admin'
+      // El superadmin (dueño) y el admin también pueden atender visitas (por si no hay técnicos): aparecen junto a los técnicos.
+      // Un admin no ve a los superadmins: para él la lista son los técnicos y los admins.
+      return c.lista.filter((x) => (soyAdmin ? ['tecnico', 'admin'] : ['tecnico', 'admin', 'superadmin']).includes(x.rol) && x.activo).map((x) => ({ usuario: x.usuario, nombre: x.nombre, rol: x.rol }))
     },
 
     // ---- empresas (solo el superadmin de la plataforma) ----

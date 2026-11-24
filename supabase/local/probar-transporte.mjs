@@ -222,6 +222,7 @@ await AD.call('usuarios_update', { id: tecAd.id, data: { clave: cedulaDe(80), te
 ok((await AD.call('usuarios_list')).some((u) => u.id === tecAd.id), 'el admin restablece la clave de un técnico y ve la lista de usuarios')
 const listaAd = await AD.call('tecnicos_list')
 ok(listaAd.some((t) => t.usuario === adm.usuario && t.rol === 'admin'), 'el admin aparece como responsable posible de visitas')
+ok(!listaAd.some((t) => t.rol === 'superadmin') && listaAd.some((t) => t.rol === 'tecnico'), 'el admin no ve a los superadmins en la lista de responsables')
 const vAdmin = await AD.call('visitas_create', { data: { fecha: manana, hora: '12:00', cliente: 'Ferretería Sol', tipo: 'Inspección', responsable: adm.usuario } })
 ok(vAdmin.responsable === adm.usuario, 'el admin puede asignarse una visita a sí mismo')
 await A.call('visitas_delete', { id: vAdmin.id })
