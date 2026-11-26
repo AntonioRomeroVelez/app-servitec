@@ -100,15 +100,15 @@ test('búsqueda y paginación del catálogo, ordenado por nombre', () => {
   assert.deepEqual([...p1.items, ...p2.items].map((c) => c.nombre).slice(0, 4), ['Álamo Hotel', 'Banco Central', 'Banco del Sur', 'Clínica Norte'])
 })
 
-test('eliminar: solo el superadmin y solo clientes sin visitas', () => {
-  const { env, sa, admin } = entornoListo()
+test('eliminar: solo un administrador y solo clientes sin visitas', () => {
+  const { env, admin, tec } = entornoListo()
   const v = env.ok('visitas_create', { data: datosVisita({ cliente: 'Con visitas' }) }, admin.token)
   const libre = env.ok('clientes_create', { data: { nombre: 'Sin visitas' } }, admin.token)
 
-  assert.equal(env.llamar('clientes_delete', { id: libre.id }, admin.token).code, 'FORBIDDEN')
-  assert.match(env.llamar('clientes_delete', { id: v.clienteId }, sa).error, /tiene visitas/)
-  assert.equal(env.llamar('clientes_delete', { id: libre.id }, sa).ok, true)
-  assert.equal(env.ok('clientes_list', {}, sa).total, 1)
+  assert.equal(env.llamar('clientes_delete', { id: libre.id }, tec.token).code, 'FORBIDDEN')
+  assert.match(env.llamar('clientes_delete', { id: v.clienteId }, admin.token).error, /tiene visitas/)
+  assert.equal(env.llamar('clientes_delete', { id: libre.id }, admin.token).ok, true)
+  assert.equal(env.ok('clientes_list', {}, admin.token).total, 1)
 })
 
 test('visitas_list filtra por cliente', () => {

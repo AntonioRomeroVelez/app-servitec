@@ -1,9 +1,11 @@
 <script setup>
-import { reactive, ref, computed, watch } from 'vue'
+import { reactive, ref, computed } from 'vue'
+import { ClipboardList, FileText, ListChecks, MessageSquareText, PenLine, Plus, Trash2, CircleAlert, Link2 } from 'lucide-vue-next'
 import { ESTADOS } from '../composables/useInformes'
 import { useConfiguracion } from '../composables/useConfiguracion'
-import { nuevoChecklist, leerChecklist, sinResponder, fallasSinObs, RESULTADOS } from '../plantillas'
+import { leerChecklist, actividadesIniciales, ejemploDeActividad, actividadesUtiles, sinCompletar, RESULTADOS, NO_APLICA, MAX_ACTIVIDADES } from '../plantillas'
 import FirmaPad from '../components/FirmaPad.vue'
+import CampoTexto from '../components/CampoTexto.vue'
 import { hoy } from '../utils'
 import { confirmar } from '../composables/useConfirmar'
 
@@ -27,110 +29,133 @@ const form = reactive({
   firmante: props.inicial?.firmante ?? '',
   firma: props.inicial?.firma ?? '',
 })
-const checklist = ref(props.inicial?.checklist ? leerChecklist(props.inicial.checklist) : nuevoChecklist(tipoInicial, tipos.value))
+// ---------- Actividades: dos casillas vacías para empezar; se agregan o quitan las que haga falta ----------
+let clave = 0
+const conClave = (lista) => lista.map((i) => ({ item: '', resultado: '', obs: '', ...i, _k: ++clave }))
+const guardadas = leerChecklist(props.inicial?.checklist)
+const actividades = ref(conClave(guardadas.length ? guardadas : actividadesIniciales()))
 const error = ref('')
-// Si el tipo del informe ya no está en la lista (el superadmin lo quitó), se conserva como opción para no perderlo
+// Si el tipo del informe ya no está en la lista (se quitó en Ajustes), se conserva como opción para no perderlo
 const opcionesTipo = computed(() => (form.tipo && !nombresTipos.value.includes(form.tipo) ? [...nombresTipos.value, form.tipo] : nombresTipos.value))
+const marcadas = computed(() => actividades.value.filter((a) => a.resultado).length)
 
-// Al cambiar el tipo se carga su plantilla, salvo que ya se hayan respondido ítems (para no perder trabajo)
-watch(
-  () => form.tipo,
-  (tipo) => {
-    if (checklist.value.every((i) => !i.resultado && !i.obs)) checklist.value = nuevoChecklist(tipo, tipos.value)
-  },
-)
+const agregar = () => actividades.value.push(...conClave([{}]))
+async function quitar(a) {
+  if ((a.item.trim() || a.resultado) && !(await confirmar({ titulo: '¿Quitar esta actividad?', texto: a.item || 'Actividad sin descripción', confirmar: 'Quitar', peligro: true }))) return
+  actividades.value = actividades.value.filter((x) => x !== a)
+}
+// Tocar de nuevo el resultado elegido lo desmarca
+const marcar = (a, id) => (a.resultado = a.resultado === id ? '' : id)
+const opcionesDe = (a) => (a.resultado === NO_APLICA.id ? [...RESULTADOS, NO_APLICA] : RESULTADOS)
 
 async function enviar() {
   error.value = ''
+  const lista = actividadesUtiles(actividades.value)
   if (form.estado === 'Finalizado') {
-    const pend = sinResponder(checklist.value)
-    const fallas = fallasSinObs(checklist.value)
-    if (pend) return (error.value = `Para finalizar responde todo el checklist (faltan ${pend}).`)
-    if (fallas) return (error.value = `Describe en observaciones cada ítem con falla (faltan ${fallas}).`)
+    const pend = sinCompletar(actividades.value)
+    if (pend) return (error.value = `Para finalizar, cada actividad necesita su descripción y su resultado (faltan ${pend}).`)
   }
   if (form.estado === 'Finalizado' && props.inicial?.estado !== 'Finalizado') {
-    const ok = await confirmar({ titulo: '¿Finalizar el informe?', texto: 'Una vez finalizado solo el superadmin podrá modificarlo.', confirmar: 'Finalizar' })
+    const ok = await confirmar({ titulo: '¿Finalizar el informe?', texto: 'Una vez finalizado solo un administrador podrá modificarlo.', confirmar: 'Finalizar' })
     if (!ok) return
   }
-  emit('guardar', { ...form, checklist: checklist.value.length ? JSON.stringify(checklist.value) : '' })
+  emit('guardar', { ...form, checklist: lista.length ? JSON.stringify(lista) : '' })
 }
 </script>
 
 <template>
-  <form class="grid gap-3.5" @submit.prevent="enviar">
-    <p v-if="inicial?.numero" class="text-sm font-semibold text-brand-700">{{ inicial.numero }}</p>
-    <p v-if="form.visitaId" class="rounded-xl bg-brand-100 px-3 py-2 text-sm text-brand-800">Vinculado a una visita agendada.</p>
-    <label class="etiqueta">Título
-      <input v-model.trim="form.titulo" class="campo" required maxlength="120" />
-    </label>
-    <label class="etiqueta">Cliente
-      <input v-model.trim="form.cliente" class="campo" required />
-    </label>
-    <div class="grid gap-3.5 sm:grid-cols-2">
-      <label class="etiqueta">Fecha
-        <input v-model="form.fecha" type="date" class="campo" required />
-      </label>
-      <label class="etiqueta">Tipo
-        <select v-model="form.tipo" class="campo">
-          <option v-for="t in opcionesTipo" :key="t">{{ t }}</option>
-        </select>
-      </label>
-      <label class="etiqueta">Estado
-        <select v-model="form.estado" class="campo">
-          <option v-for="e in ESTADOS" :key="e">{{ e }}</option>
-        </select>
-      </label>
-      <label class="etiqueta">Responsable
-        <input v-model.trim="form.responsable" class="campo" />
-      </label>
-    </div>
+  <form class="@container grid gap-4" @submit.prevent="enviar">
+    <p v-if="inicial?.numero" class="font-mono text-sm font-semibold text-brand-700">{{ inicial.numero }}</p>
+    <p v-if="form.visitaId" class="flex items-center gap-2 rounded-xl bg-brand-100 px-3 py-2 text-sm text-brand-800"><Link2 :size="16" class="shrink-0" aria-hidden="true" />Vinculado a una visita agendada.</p>
 
-    <!-- Checklist de la plantilla -->
-    <section v-if="checklist.length" class="grid gap-2">
-      <h3 class="font-semibold text-brand-800">Checklist ({{ checklist.length - sinResponder(checklist) }}/{{ checklist.length }})</h3>
-      <div v-for="(c, idx) in checklist" :key="c.item" class="tarjeta grid gap-2 p-3">
-        <p class="text-sm font-medium text-brand-900">{{ c.item }}</p>
-        <div class="grid grid-cols-3 gap-1.5" role="radiogroup" :aria-label="c.item">
+    <!-- Datos -->
+    <section class="tarjeta grid gap-3">
+      <h3 class="flex items-center gap-2 font-semibold text-brand-900"><FileText :size="18" class="text-brand-600" aria-hidden="true" />Datos del informe</h3>
+      <label class="etiqueta">Título
+        <input v-model.trim="form.titulo" class="campo" required maxlength="120" placeholder="Ej.: Mantenimiento de cámaras - Banco del Sur" />
+      </label>
+      <label class="etiqueta">Cliente
+        <input v-model.trim="form.cliente" class="campo" required placeholder="Nombre del cliente o empresa" />
+      </label>
+      <div class="grid grid-cols-1 gap-3 @sm:grid-cols-2 @3xl:grid-cols-4">
+        <label class="etiqueta">Fecha
+          <input v-model="form.fecha" type="date" class="campo" required />
+        </label>
+        <label class="etiqueta">Tipo de visita
+          <select v-model="form.tipo" class="campo">
+            <option v-for="t in opcionesTipo" :key="t">{{ t }}</option>
+          </select>
+        </label>
+        <label class="etiqueta">Estado
+          <select v-model="form.estado" class="campo">
+            <option v-for="e in ESTADOS" :key="e">{{ e }}</option>
+          </select>
+        </label>
+        <label class="etiqueta">Responsable
+          <input v-model.trim="form.responsable" class="campo" placeholder="Quién realizó el trabajo" />
+        </label>
+      </div>
+    </section>
+
+    <!-- Actividades -->
+    <section class="grid gap-2.5">
+      <div class="flex items-center justify-between gap-2">
+        <h3 class="flex items-center gap-2 font-semibold text-brand-900"><ListChecks :size="18" class="text-brand-600" aria-hidden="true" />Actividades realizadas</h3>
+        <span v-if="actividades.length" class="rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-semibold text-brand-800">{{ marcadas }} de {{ actividades.length }}</span>
+      </div>
+      <p v-if="!actividades.length" class="rounded-xl bg-brand-50 px-3 py-3 text-sm text-brand-700">
+        <ClipboardList :size="16" class="mr-1.5 inline" aria-hidden="true" />Todavía no hay actividades. Agrega la primera.
+      </p>
+      <div v-for="(a, n) in actividades" :key="a._k" class="tarjeta grid gap-2.5 p-3">
+        <div class="flex items-start gap-2">
+          <span class="mt-2.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-800">{{ n + 1 }}</span>
+          <CampoTexto v-model="a.item" :filas="1" class="min-w-0 flex-1" maxlength="500" :placeholder="ejemploDeActividad(n, form.tipo, tipos)" :aria-label="`Actividad ${n + 1}`" />
+          <button type="button" class="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-red-700 active:bg-red-50" :aria-label="`Quitar actividad ${n + 1}`" @click="quitar(a)">
+            <Trash2 :size="18" aria-hidden="true" />
+          </button>
+        </div>
+        <div class="grid grid-flow-col gap-1.5 @xl:justify-start" role="radiogroup" :aria-label="`Resultado de la actividad ${n + 1}`">
           <button
-            v-for="r in RESULTADOS"
+            v-for="r in opcionesDe(a)"
             :key="r.id"
             type="button"
             role="radio"
-            :aria-checked="c.resultado === r.id"
-            class="min-h-11 rounded-lg border text-sm font-semibold"
-            :class="c.resultado === r.id ? r.activo : 'border-brand-200 bg-white text-brand-700'"
-            @click="checklist[idx].resultado = r.id"
+            :aria-checked="a.resultado === r.id"
+            class="min-h-11 rounded-lg border px-2 text-sm font-semibold @xl:min-w-32"
+            :class="a.resultado === r.id ? r.activo : 'border-brand-200 bg-white text-brand-700'"
+            @click="marcar(a, r.id)"
           >
             {{ r.texto }}
           </button>
         </div>
-        <input
-          v-if="c.resultado === 'falla' || c.obs"
-          v-model="checklist[idx].obs"
-          class="campo"
-          placeholder="Observación (obligatoria si hay falla)"
-          maxlength="300"
-        />
+        <!-- Observación aparte que tengan los informes anteriores -->
+        <CampoTexto v-if="a.obs" v-model="a.obs" :filas="1" maxlength="300" placeholder="Observación" :aria-label="`Observación de la actividad ${n + 1}`" />
       </div>
+      <button type="button" class="flex min-h-12 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand-300 font-semibold text-brand-700 active:bg-brand-100 disabled:opacity-60" :disabled="actividades.length >= MAX_ACTIVIDADES" @click="agregar">
+        <Plus :size="18" aria-hidden="true" />Agregar actividad
+      </button>
     </section>
 
-    <label class="etiqueta">Observaciones generales
-      <textarea v-model="form.descripcion" rows="6" class="campo" />
-    </label>
+    <!-- Observaciones -->
+    <section class="tarjeta grid gap-2">
+      <label for="informe-observaciones" class="flex items-center gap-2 font-semibold text-brand-900"><MessageSquareText :size="18" class="text-brand-600" aria-hidden="true" />Observaciones generales</label>
+      <CampoTexto id="informe-observaciones" v-model="form.descripcion" :filas="2" placeholder="Recomendaciones, pendientes o detalles importantes de la visita…" />
+    </section>
 
-    <section class="grid gap-2">
-      <h3 class="font-semibold text-brand-800">Conformidad del cliente</h3>
-      <label class="etiqueta">Recibido por (nombre)
-        <input v-model.trim="form.firmante" class="campo" autocomplete="off" />
+    <!-- Conformidad -->
+    <section class="tarjeta grid gap-3">
+      <h3 class="flex items-center gap-2 font-semibold text-brand-900"><PenLine :size="18" class="text-brand-600" aria-hidden="true" />Conformidad del cliente</h3>
+      <label class="etiqueta">Recibido por
+        <input v-model.trim="form.firmante" class="campo" autocomplete="off" placeholder="Nombre y apellido de quien recibe" />
       </label>
       <FirmaPad v-model="form.firma" />
     </section>
 
-    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+    <p v-if="error" class="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert"><CircleAlert :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />{{ error }}</p>
 
-    <div class="mt-2 flex gap-2.5 sm:justify-end">
+    <div class="flex gap-2.5 sm:justify-end">
       <button type="button" class="btn-borde" @click="emit('cancelar')">Cancelar</button>
-      <button type="submit" class="btn" :disabled="cargando">{{ cargando ? 'Guardando…' : 'Guardar' }}</button>
+      <button type="submit" class="btn" :disabled="cargando">{{ cargando ? 'Guardando…' : 'Guardar informe' }}</button>
     </div>
   </form>
 </template>

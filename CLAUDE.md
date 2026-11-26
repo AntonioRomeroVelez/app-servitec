@@ -6,6 +6,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 App móvil (PWA) para agendar visitas técnicas y crear informes (checklist, firma, fotos, PDF). Frontend Vue 3 + Vite + Tailwind v4; backend en Google Apps Script sobre Google Sheets (base de datos) y Drive (fotos). Repositorio: https://github.com/AntonioRomeroVelez/app-servitec (rama `main`). El detalle de uso y despliegue está en `README.md`.
 
+## Base de datos elegida: Google Sheets (decisión del 26-11-2026)
+
+El dueño quiere usar Google Sheets como base de datos, con cada registro a nombre de quien lo crea. Esto reemplaza lo que más abajo describe a Supabase como destino (la sección de migración queda como referencia; su código sigue en el repositorio).
+
+- Para usar Sheets: `VITE_SCRIPT_URL` definida y **sin** `VITE_SUPABASE_URL` (Supabase tiene prioridad en `src/api.js`), en `.env` y en Vercel.
+- Quién creó cada cosa: columnas `autor` y `modificadoPor` en Usuarios, Visitas, Informes y Clientes; `autor` en Fotos; `modificadoPor` en Configuración; y la hoja Bitácora. Las pone siempre el servidor; lo que envíe el cliente se ignora.
+- Las columnas nuevas de una hoja van siempre al final. En Usuarios se agregan solas a una hoja existente (`completarColumnas_`).
+- Toda función nueva de la app se implementa en `apps-script/Code.gs` y en el modo demo (`src/api.js`), con prueba en `apps-script/test/`.
+- Cada empresa tiene su hoja de cálculo y su carpeta en Drive: `ServiTec - Empresas / Nombre de la empresa /` con la hoja `ServiTec - Nombre` (Visitas, Informes, Fotos, Clientes, Notificaciones, Bitácora, Configuración) y, al lado, `Nombre (usuario) / AAAA-MM` con las fotos. Fotos: JPEG de hasta 1280 px y objetivo 200 KB (`comprimirImagen`). La hoja principal (la del script) guarda solo `Empresas` (con `hojaId` y `carpetaId`) y `Usuarios` (y la bitácora de lo que no es de ninguna empresa).
+- En `Code.gs`, `tabla_` elige el libro según `EMPRESA_ACTUAL` (la de la sesión); para trabajar con otra empresa usar `enEmpresa_(id, fn)`. Las tablas globales llevan `global: true`. `empresaId` lo pone el servidor, nunca el cliente (prueba: `apps-script/test/empresas.test.js`).
+- Jerarquía vigente (cuatro niveles, confirmada por el dueño):
+  1. `root` (dueño del sistema, sin empresa): solo crea empresas, las habilita o deshabilita y ve a sus superadmins (usuario, clave temporal, restablecer). No personaliza ni edita datos.
+  2. `superadmin` (uno por empresa, se crea con ella; es el mismo dueño del sistema dando soporte): ÚNICO que cambia datos, logo, colores, informes y tipos de visita de su empresa; crea y gestiona administradores. No trabaja con visitas, informes ni clientes.
+  3. `admin`: el propietario (primer admin que crea el superadmin, columna `propietario`; su cuenta solo la cambian él mismo y el superadmin) y los que él cree: visitas, informes (también finalizados) y clientes; crea, edita, desactiva y elimina admins y técnicos. No ve superadmins ni cambia Ajustes.
+  4. `tecnico`: sus visitas e informes.
+- Marca: `tema` = { primario, acento, encabezado, fondo }; imágenes en secciones `logo`, `logoClaro`, `fondoImagen` (data URL ≤ 45.000 caracteres, una celda). `--color-encabezado` (barra y menú), `estiloFondo` (ingreso), `colores.js` (colores desde el logo), `VistaPreviaMarca.vue`.
+- Ajustes (`ConfiguracionView.vue`): portada con tarjetas y una pantalla por sección; vista previa del PDF con `informeEjemplo.js`. Antes de ingresar, `configuracion_get { empresa }` entrega solo datos, tema y logo (`marcaPublica_`); el dispositivo recuerda la empresa (`servitec-empresa`) del enlace `?empresa=` o del último ingreso.
+- Eliminar un usuario solo marca la columna `eliminado` (el nombre de usuario no se reutiliza) y se impide si tiene visitas pendientes.
+- Al crear una empresa se piden nombre, ciudad, cédula, correo y teléfono. Usuario del superadmin: primera palabra del nombre (`usuarioDeEmpresa_`). Clave temporal: **la cédula del root** (decisión del dueño, advertido de que todas las empresas la conocen); sale de su fila o de la propiedad `SUPERADMIN_CEDULA`. Las claves van con hash: solo se ve la temporal mientras no la cambien.
+- Cédula, correo y teléfono no se repiten dentro de una empresa, salvo entre el superadmin y el propietario (`sinDatosRepetidos_`).
+- Los datos de una versión anterior (todo en la hoja principal) se copian solos a la hoja de la primera empresa (`migrarEmpresas_`); el original no se borra. El modo demo no tiene empresas. Los datos que estén en Supabase no se migran solos.
+
 ## Reglas del usuario (obligatorias)
 
 - Todo en español: respuestas, textos de la interfaz, mensajes de error, comentarios y documentación.
@@ -22,13 +44,13 @@ App móvil (PWA) para agendar visitas técnicas y crear informes (checklist, fir
 npm run dev            # servidor de desarrollo (vite --host)
 npm run build          # compila a dist/ (genera service worker y manifiesto)
 npm run preview        # sirve dist/
-npm run test:gs        # todas las pruebas (node --test apps-script/test/*.test.js); hoy 118
+npm run test:gs        # todas las pruebas (node --test apps-script/test/*.test.js); hoy 167
 node --test apps-script/test/seguridad.test.js   # una sola suite
 npm run servidor:local # Code.gs real sobre HTTP en el puerto 5400 (/__red?estado=off|on, /__hoja?nombre=...)
 node scripts/generar-iconos.mjs                  # regenera los iconos de public/
 ```
 
-- Sin `VITE_SCRIPT_URL` la app corre en modo demo (localStorage): usuarios `superadmin / superadmin123`, `admin / admin123`, técnico en la pantalla de login. Para ver la app sin tocar el backend real: `VITE_SCRIPT_URL= npx vite build --outDir dist-local` y `vite preview --outDir dist-local`.
+- Sin `VITE_SCRIPT_URL` la app corre en modo demo (localStorage): usuarios `superadmin / superadmin123`, `admin / admin123`, técnico en la pantalla de login. Para ver la app sin tocar el backend real: `VITE_SCRIPT_URL= VITE_SUPABASE_URL= npx vite build --outDir dist-local` (en Git Bash; PowerShell borra las variables vacías) y `vite preview --outDir dist-local`.
 - `VITE_BASE=/subcarpeta/` al compilar si se publica en una subcarpeta (GitHub Pages).
 - El puerto 5173 puede estar ocupado por otro proyecto: no matar procesos ajenos; usar otro puerto y cerrar solo los propios.
 

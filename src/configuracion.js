@@ -2,8 +2,10 @@
 // visita con su checklist). Deben coincidir con CONFIG_DEFECTO de apps-script/Code.gs: una prueba lo comprueba.
 export const CONFIG_DEFECTO = {
   empresa: { nombre: 'ServiTec', subtitulo: '', ruc: '', direccion: '', telefono: '', correo: '', web: '', pie: '' },
-  tema: { primario: '#1565d8', acento: '#f6c915' },
+  tema: { primario: '#1565d8', acento: '#f6c915', encabezado: '', fondo: 'degradado' }, // encabezado '' = según el principal
   logo: '',
+  logoClaro: '', // para fondos oscuros (ingreso y menú)
+  fondoImagen: '', // foto de la pantalla de ingreso
   informes: { prefijo: 'INF', pdfChecklist: true, pdfFotos: true, pdfFirma: true, pdfObservaciones: true },
   tipos: [
     { nombre: 'Visita técnica', checklist: ['Estado general de las cámaras', 'Imagen y enfoque de cada cámara', 'Estado del grabador (DVR/NVR)', 'Almacenamiento y grabaciones', 'Cableado y conectores', 'Alimentación eléctrica / UPS', 'Acceso remoto (app / red)'] },
@@ -21,7 +23,7 @@ export function combinar(cfg) {
   const base = clonar(CONFIG_DEFECTO)
   if (!cfg || typeof cfg !== 'object') return base
   for (const k of ['empresa', 'tema', 'informes']) if (cfg[k] && typeof cfg[k] === 'object') base[k] = { ...base[k], ...cfg[k] }
-  if (typeof cfg.logo === 'string') base.logo = cfg.logo
+  for (const k of ['logo', 'logoClaro', 'fondoImagen']) if (typeof cfg[k] === 'string') base[k] = cfg[k]
   if (Array.isArray(cfg.tipos) && cfg.tipos.length) base.tipos = cfg.tipos
   return base
 }

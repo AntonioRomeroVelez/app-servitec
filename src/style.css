@@ -13,6 +13,7 @@
   --color-brand-800: #0b3a85;
   --color-brand-900: #0a2a5e;
   --color-brand-950: #06173a;
+  --color-encabezado: var(--color-brand-800); /* barra superior y menú: la empresa puede elegir otro */
   --color-acento: #f6c915;
   --color-acento-600: #d9ae08;
   --color-acento-texto: #06173a; /* texto legible sobre el acento: se recalcula al cambiar el color de acento */

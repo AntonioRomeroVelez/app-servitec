@@ -36,7 +36,7 @@ import { ArrowLeft, Bell, Building2, CalendarDays, FileText, LayoutDashboard, Me
 import MenuLateral from './components/MenuLateral.vue'
 import { estado as estadoRed } from './offline/estado'
 
-const { usuario, esSuper, esPlataforma, puedeUsuarios, puedeAgendar, logueado, logout } = useAuth()
+const { usuario, esSuper, esPlataforma, esRoot, sinOperacion, puedeUsuarios, puedeAgendar, logueado, logout } = useAuth()
 const I = useInformes()
 const V = useVisitas()
 const T = useTecnicos()
@@ -84,7 +84,7 @@ const TITULOS = {
   notificaciones: 'Notificaciones',
   pendientes: 'Cambios pendientes',
   clientes: 'Clientes',
-  ajustes: 'Ajustes de la app',
+  ajustes: 'Personalizar la empresa',
   instalar: 'Instalar la app',
   qr: 'Código QR de instalación',
 }
@@ -112,6 +112,13 @@ function irAgenda(periodo) {
 function irInformes(estado) {
   I.cargar(estado ? { estado } : {}).catch(() => {})
   ir('informes')
+}
+
+// Los accesos del inicio abren la sección por su principio (sin la subsección elegida antes en el menú)
+function irDesdeInicio(v) {
+  opcionActiva.value = null
+  solicitudAjustes.value = null
+  ir(v)
 }
 
 // Detalle de visita: muestra la visita ya cargada y pide al servidor sus informes (el listado general está paginado)
@@ -281,9 +288,11 @@ watch(
   (si) => {
     if (si) {
       ir('dashboard')
+      CFG.recordarEmpresa(usuario.value?.empresaId) // para mostrar su marca en el ingreso (el root no tiene)
+      CFG.cargar()
+      if (sinOperacion.value) return // root y superadministrador no tienen visitas, informes ni avisos
       recargar()
       N.iniciar()
-      CFG.cargar()
       detenerConexion = iniciarSincronizacion({ alRecuperar: refrescarTodo })
     } else {
       N.detener()
@@ -319,6 +328,36 @@ const arbol = computed(() => {
   const sinLeer = N.noLeidas.value || null
   const sinEnviar = estadoRed.pendientes + estadoRed.fallidas
 
+  if (esRoot.value) {
+    return [
+      hoja('dashboard', 'Inicio', ['dashboard'], { icono: LayoutDashboard }),
+      hoja('empresas', 'Empresas', ['empresas'], { icono: Building2 }),
+      !instalada.value && hoja('instalar', 'Instalar en este equipo', ['instalar'], { icono: Smartphone }),
+      hoja('clave', 'Cambiar mi clave', ['clave'], { icono: UserRound }),
+    ].filter(Boolean)
+  }
+
+  const ajustes = () =>
+    grupo(
+      'ajustes',
+      'Personalizar la empresa',
+      Settings,
+      [['portada', 'Todos los ajustes'], ['empresa', 'Datos de la empresa'], ['tema', 'Colores y logo'], ['informes', 'Informes'], ['tipos', 'Tipos de visita y checklists']].map(([seccion, texto]) =>
+        hoja(`ajustes-${seccion}`, texto, ['ajustes'], { opcion: seccion }),
+      ),
+    )
+
+  if (esSuper.value) {
+    return [
+      hoja('dashboard', 'Inicio', ['dashboard'], { icono: LayoutDashboard }),
+      ajustes(),
+      hoja('usuarios', 'Administradores', ['usuarios'], { icono: ShieldCheck }),
+      hoja('qr', 'Código QR para instalar', ['qr'], { icono: QrCode }),
+      !instalada.value && hoja('instalar', 'Instalar en este equipo', ['instalar'], { icono: Smartphone }),
+      hoja('clave', 'Cambiar mi clave', ['clave'], { icono: UserRound }),
+    ].filter(Boolean)
+  }
+
   return [
     hoja('dashboard', 'Inicio', ['dashboard'], { icono: LayoutDashboard }),
     grupo('visitas', puedeAgendar.value ? 'Visitas' : 'Mis visitas', CalendarDays, [
@@ -335,19 +374,7 @@ const arbol = computed(() => {
         hoja('cliente-nuevo', 'Nuevo cliente', ['clientes'], { opcion: 'nuevo' }),
       ]),
     esPlataforma.value && hoja('empresas', 'Empresas', ['empresas'], { icono: Building2 }),
-    puedeUsuarios.value &&
-      grupo('administracion', 'Administración', ShieldCheck, [
-        hoja('usuarios', 'Usuarios', ['usuarios']),
-        esSuper.value &&
-        grupo(
-          'ajustes',
-          'Ajustes de la app',
-          Settings,
-          [['empresa', 'Datos de la empresa'], ['tema', 'Colores y logo'], ['informes', 'Informes'], ['tipos', 'Tipos de visita y checklists']].map(([seccion, texto]) =>
-            hoja(`ajustes-${seccion}`, texto, ['ajustes'], { opcion: seccion }),
-          ),
-        ),
-      ]),
+    puedeUsuarios.value && hoja('usuarios', 'Usuarios', ['usuarios'], { icono: ShieldCheck }),
     grupo('instalacion', 'Instalar la app', Smartphone, [
       puedeAgendar.value && hoja('qr', 'Código QR para instalar', ['qr']),
       !instalada.value && hoja('instalar', 'Instalar en este equipo', ['instalar']),
@@ -405,8 +432,8 @@ function salirDelMenu() {
   <ClaveView v-else-if="usuario.cambiarClave" obligatorio />
 
   <template v-else>
-    <header class="sticky top-0 z-10 print:hidden bg-brand-800 pt-[env(safe-area-inset-top)] text-white shadow">
-      <div class="mx-auto flex max-w-3xl items-center gap-0.5 px-2 py-1">
+    <header class="sticky top-0 z-10 print:hidden bg-encabezado pt-[env(safe-area-inset-top)] text-white shadow">
+      <div class="flex w-full items-center gap-0.5 px-2 py-1 lg:px-6">
         <button class="flex size-10 shrink-0 items-center justify-center rounded-full active:bg-white/10" aria-label="Abrir menú" aria-haspopup="dialog" :aria-expanded="menuAbierto" aria-controls="menu-lateral" @click="abrirMenu">
           <Menu :size="22" aria-hidden="true" />
         </button>
@@ -414,7 +441,7 @@ function salirDelMenu() {
           <ArrowLeft :size="20" aria-hidden="true" />
         </button>
         <h1 class="flex-1 truncate px-2 text-base font-semibold">{{ vista === 'agenda' && !puedeAgendar ? 'Mis visitas' : TITULOS[vista] }}</h1>
-        <button class="relative flex size-10 shrink-0 items-center justify-center rounded-full text-brand-100 active:bg-white/10" aria-label="Notificaciones" @click="ir('notificaciones')">
+        <button v-if="!sinOperacion" class="relative flex size-10 shrink-0 items-center justify-center rounded-full text-brand-100 active:bg-white/10" aria-label="Notificaciones" @click="ir('notificaciones')">
           <Bell :size="20" aria-hidden="true" />
           <span v-if="N.noLeidas.value" class="absolute top-1 right-0.5 flex min-w-4 items-center justify-center rounded-full bg-acento px-1 text-[10px] leading-4 font-bold text-acento-texto">{{ N.noLeidas.value > 9 ? '9+' : N.noLeidas.value }}</span>
         </button>
@@ -427,20 +454,20 @@ function salirDelMenu() {
     <p v-if="modoDemo" class="print:hidden bg-acento/90 px-4 py-1.5 text-xs text-acento-texto">Modo demo: datos solo en este dispositivo. Configura <code>VITE_SCRIPT_URL</code> para usar Google Sheets.</p>
     <Toaster position="top-center" rich-colors close-button :visible-toasts="3" class="print:hidden" />
 
-    <main class="mx-auto max-w-3xl px-4 pt-3 pb-24 print:max-w-none print:p-0">
+    <main class="w-full px-4 pt-3 pb-24 lg:px-8 lg:pt-5 print:p-0">
       <!-- Agenda -->
       <DashboardView
         v-if="vista === 'dashboard'"
         :key="claveRefresco"
         @agenda="irAgenda"
         @informes="irInformes"
-        @ir="(v) => ir(v)"
+        @ir="irDesdeInicio"
         @visita="(id) => abrirVisita(id)"
         @informe="(id) => abrirInforme('informe-detalle', id)"
         @nueva-visita="nuevaVisita"
         @nuevo-informe="nuevoInforme"
       />
-      <AgendaView v-else-if="vista === 'agenda'" :visitas="V.items.value" :cargando="cargando" :mostrar-autor="esSuper" :nombre-de="T.nombreDe" :total="V.meta.value.total" :offset="V.parametros.value.offset || 0" :limite="V.limite" :filtros="V.parametros.value" @abrir="(id) => abrirVisita(id)" @refrescar="recargar" @buscar="(p) => V.cargar(p).catch(() => {})" @pagina="(o) => V.irAPagina(o).catch(() => {})" />
+      <AgendaView v-else-if="vista === 'agenda'" :visitas="V.items.value" :cargando="cargando" :mostrar-autor="puedeAgendar" :nombre-de="T.nombreDe" :total="V.meta.value.total" :offset="V.parametros.value.offset || 0" :limite="V.limite" :filtros="V.parametros.value" @abrir="(id) => abrirVisita(id)" @refrescar="recargar" @buscar="(p) => V.cargar(p).catch(() => {})" @pagina="(o) => V.irAPagina(o).catch(() => {})" />
       <FormVisita v-else-if="vista === 'visita-editar' && visita && puedeAgendar" :tecnicos="T.tecnicos.value" :inicial="visita" :cargando="cargando" @guardar="guardarVisita" @cancelar="abrirVisita(seleccionadoId)" />
       <DetalleVisita
         v-else-if="vista === 'visita-detalle' && visita"
@@ -461,7 +488,7 @@ function salirDelMenu() {
         v-else-if="vista === 'informes'"
         :informes="I.items.value"
         :cargando="I.cargando.value"
-        :mostrar-autor="esSuper"
+        :mostrar-autor="puedeAgendar"
         :total="I.meta.value.total"
         :offset="I.parametros.value.offset || 0"
         :limite="I.limite"
@@ -480,7 +507,7 @@ function salirDelMenu() {
       <ClientesView v-else-if="vista === 'clientes' && puedeAgendar" :solicitud="solicitudClientes" @agendar="agendarParaCliente" @abrir-visita="abrirVisita" />
       <ConfiguracionView v-else-if="vista === 'ajustes' && esSuper" :solicitud="solicitudAjustes" />
       <InstalarView v-else-if="vista === 'instalar'" @continuar="ir('dashboard')" />
-      <QrInstalarView v-else-if="vista === 'qr' && puedeAgendar" />
+      <QrInstalarView v-else-if="vista === 'qr' && (puedeAgendar || esSuper)" />
       <ClaveView v-else-if="vista === 'clave'" @listo="ir('dashboard')" />
       <UsuariosView v-else-if="vista === 'usuarios' && puedeUsuarios" />
       <EmpresasView v-else-if="vista === 'empresas' && esPlataforma" />
@@ -489,7 +516,7 @@ function salirDelMenu() {
     <Modal v-if="modal === 'visita' && puedeAgendar" titulo="Nueva visita" @cerrar="cerrarModal">
       <FormVisita :tecnicos="T.tecnicos.value" :prefill="prefillVisita" :cargando="cargando" @guardar="crearVisita" @cancelar="cerrarModal" />
     </Modal>
-    <Modal v-if="modal === 'informe'" titulo="Nuevo informe" @cerrar="cerrarModal">
+    <Modal v-if="modal === 'informe'" titulo="Nuevo informe" ancho @cerrar="cerrarModal">
       <FormInforme :prefill="prefill" :cargando="cargando" @guardar="crearInforme" @cancelar="cerrarModal" />
     </Modal>
 

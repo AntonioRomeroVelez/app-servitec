@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import { PenLine, Eraser } from 'lucide-vue-next'
 
 // Firma manuscrita en canvas. v-model = data URL PNG (fondo transparente, ~3-8 KB).
 const modelo = defineModel({ type: String, default: '' })
@@ -58,21 +59,26 @@ function borrar() {
 </script>
 
 <template>
-  <div class="grid gap-1.5">
+  <div class="grid max-w-xl gap-1.5">
+    <div class="relative">
     <canvas
       ref="canvas"
       :width="W"
       :height="H"
-      class="w-full touch-none rounded-xl border border-dashed border-brand-300 bg-white"
+      class="block w-full cursor-crosshair touch-none rounded-xl border-2 border-dashed border-brand-300 bg-white"
       aria-label="Área de firma"
       @pointerdown.prevent="inicio"
       @pointermove.prevent="mover"
       @pointerup="fin"
       @pointercancel="fin"
     />
+      <!-- Línea y texto guía: no estorban al dibujar y el texto desaparece al firmar -->
+      <span class="pointer-events-none absolute inset-x-8 bottom-8 border-b border-brand-200" aria-hidden="true" />
+      <span v-if="!modelo" class="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 text-sm text-brand-400" aria-hidden="true"><PenLine :size="18" />Firme aquí</span>
+    </div>
     <div class="flex items-center justify-between text-xs text-brand-700/70">
-      <span>Firma con el dedo dentro del recuadro</span>
-      <button type="button" class="min-h-9 px-2 font-semibold text-brand-700" @click="borrar">Borrar firma</button>
+      <span>Firma con el dedo o el ratón dentro del recuadro</span>
+      <button type="button" class="flex min-h-9 items-center gap-1.5 px-2 font-semibold text-brand-700" @click="borrar"><Eraser :size="14" aria-hidden="true" />Borrar firma</button>
     </div>
   </div>
 </template>

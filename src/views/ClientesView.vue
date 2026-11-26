@@ -17,7 +17,7 @@ import { fechaCorta } from '../utils'
 // aquí se pueden buscar, corregir sus datos, agendarles una visita y ver sus últimas visitas.
 const emit = defineEmits(['agendar', 'abrirVisita'])
 const props = defineProps({ solicitud: Object }) // desde el menú: { tipo: 'nuevo' } abre el formulario de alta
-const { esSuper } = useAuth()
+const { puedeAgendar } = useAuth()
 const C = useClientes()
 
 const q = ref(C.parametros.value.q ?? '')
@@ -103,7 +103,7 @@ async function alternarVisitas(c) {
     {{ q ? 'No hay clientes que coincidan.' : 'Aún no hay clientes. Se registran solos al agendar una visita.' }}
   </p>
 
-  <ul class="grid gap-2.5">
+  <ul class="grid gap-2.5 lg:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
     <li v-for="c in C.items.value" :key="c.id" class="tarjeta grid gap-2.5">
       <template v-if="editando !== c.id">
         <div class="flex items-start gap-3">
@@ -129,7 +129,7 @@ async function alternarVisitas(c) {
             <ChevronDown v-else :size="16" aria-hidden="true" />
             Visitas
           </button>
-          <button v-if="esSuper" class="btn-peligro min-h-10 text-sm" @click="eliminar(c)">
+          <button v-if="puedeAgendar" class="btn-peligro min-h-10 text-sm" @click="eliminar(c)">
             <Trash2 :size="16" aria-hidden="true" />
             Eliminar
           </button>

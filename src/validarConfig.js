@@ -1,10 +1,11 @@
 // Validación de cada sección de la configuración (empresa, tema, logo, informes, tipos).
 // La usan el modo demo y el transporte de Supabase, para que ambos apliquen las mismas reglas.
-import { CONFIG_DEFECTO } from './configuracion'
-import { contraste } from './tema'
-import { normalizar } from './utils'
+import { CONFIG_DEFECTO } from './configuracion.js'
+import { contraste } from './tema.js'
+import { normalizar } from './utils.js'
 
-export const SECCIONES = ['empresa', 'tema', 'logo', 'informes', 'tipos']
+const IMAGENES = ['logo', 'logoClaro', 'fondoImagen']
+export const SECCIONES = ['empresa', 'tema', ...IMAGENES, 'informes', 'tipos']
 
 /** Devuelve el valor ya limpio de una sección o lanza Error con un mensaje en español. */
 export function valorSeccion(seccion, d = {}) {
@@ -17,11 +18,17 @@ export function valorSeccion(seccion, d = {}) {
     const t = { primario: String(d.primario || '').trim().toLowerCase(), acento: String(d.acento || '').trim().toLowerCase() }
     if (!/^#[0-9a-f]{6}$/.test(t.primario) || !/^#[0-9a-f]{6}$/.test(t.acento)) throw new Error('Los colores deben tener el formato #RRGGBB')
     if (contraste(t.primario, '#ffffff') < 4.5) throw new Error('El color principal es demasiado claro: el texto blanco no se leería. Elige uno más oscuro.')
-    return t
+    const encabezado = String(d.encabezado || '').trim().toLowerCase()
+    if (encabezado && !/^#[0-9a-f]{6}$/.test(encabezado)) throw new Error('Los colores deben tener el formato #RRGGBB')
+    if (encabezado && contraste(encabezado, '#ffffff') < 4.5) throw new Error('El color del encabezado es demasiado claro: el texto blanco no se leería. Elige uno más oscuro.')
+    const fondo = d.fondo || 'degradado'
+    if (!['degradado', 'solido', 'foto'].includes(fondo)) throw new Error('Fondo de ingreso inválido')
+    return { ...t, encabezado, fondo }
   }
-  if (seccion === 'logo') {
-    if (d.logo && !/^data:image\/(png|jpeg|webp);base64,/.test(d.logo)) throw new Error('El logo debe ser una imagen PNG, JPG o WebP')
-    return d.logo || ''
+  if (IMAGENES.includes(seccion)) {
+    const imagen = d[seccion] || ''
+    if (imagen && !/^data:image\/(png|jpeg|webp);base64,/.test(imagen)) throw new Error('La imagen debe ser PNG, JPG o WebP')
+    return imagen
   }
   if (seccion === 'informes') {
     const prefijo = String(d.prefijo || '').trim().toUpperCase()

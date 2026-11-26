@@ -13,8 +13,8 @@ const PIE_ALTO = 20 // espacio reservado abajo para el pie
 const OSCURO = [30, 41, 59]
 const GRIS = [100, 116, 139]
 const LINEA = [226, 232, 240]
-const COLOR_RESULTADO = { ok: [4, 120, 87], falla: [185, 28, 28], na: [71, 85, 105] }
-const TEXTO_RESULTADO = { ok: 'Cumple', falla: 'Falla', na: 'N/A' }
+const COLOR_RESULTADO = { ok: [4, 120, 87], no: [180, 83, 9], falla: [185, 28, 28], na: [71, 85, 105] }
+const TEXTO_RESULTADO = { ok: 'Cumple', no: 'No cumple', falla: 'Falla', na: 'N/A' }
 const COLOR_ESTADO = { Borrador: [100, 116, 139], 'En revisión': [180, 83, 9], Finalizado: [4, 120, 87] }
 
 const hexARgb = (hex) => {
@@ -146,11 +146,12 @@ export async function generarPdfInforme(d) {
 
   // ---------------- Checklist ----------------
   if (opciones.pdfChecklist !== false && checklist.length) {
-    titulo('Checklist')
-    const resumen = { ok: 0, falla: 0, na: 0 }
+    titulo('Actividades realizadas')
+    const resumen = { ok: 0, no: 0, falla: 0, na: 0 }
     for (const c of checklist) if (resumen[c.resultado] !== undefined) resumen[c.resultado]++
     fuente('normal', 8.5, GRIS)
-    texto(`${resumen.ok} cumplen  |  ${resumen.falla} fallas  |  ${resumen.na} no aplican`, M, y)
+    const cuenta = [`${resumen.ok} cumplen`, `${resumen.no} no cumplen`, `${resumen.falla} fallas`, resumen.na && `${resumen.na} no aplican`]
+    texto(cuenta.filter(Boolean).join('  |  '), M, y)
     y += 4
     for (const c of checklist) {
       const lineasItem = envolver(c.item, UTIL - 32)

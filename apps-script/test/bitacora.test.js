@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { crearEntorno, CLAVE_INICIAL } from './harness.js'
-import { entornoListo, datosVisita, datosInforme, checklistCompleto, JPEG_B64, MINI } from './ayudas.js'
+import { conEmpresa, datosUsuario, entornoListo, datosVisita, datosInforme, checklistCompleto, JPEG_B64, MINI } from './ayudas.js'
 
 const esFecha = (v) => Object.prototype.toString.call(v) === '[object Date]' // las fechas se crean dentro del simulador
 const dd = (n) => String(n).padStart(2, '0')
@@ -68,9 +68,9 @@ test('informes: creado, finalizado, modificado y eliminado', () => {
   assert.ok(!fin.detalle.includes('Texto nuevo'))
 
   env.ok('informes_update', { id: inf.id, data: { titulo: 'Reabierto' } }, sa)
-  assert.equal(ultima(env, 'Informe modificado').usuario, 'superadmin')
+  assert.equal(ultima(env, 'Informe modificado').usuario, 'dueno')
   env.ok('informes_delete', { id: inf.id }, sa)
-  assert.equal(ultima(env, 'Informe eliminado').rol, 'superadmin')
+  assert.equal(ultima(env, 'Informe eliminado').rol, 'admin')
 })
 
 test('fotos y clientes también quedan registrados', () => {
@@ -90,25 +90,24 @@ test('fotos y clientes también quedan registrados', () => {
   assert.match(ultima(env, 'Cliente modificado').detalle, /Teléfono: de 099 a 098/)
   assert.match(ultima(env, 'Cliente modificado').detalle, /Dirección: de — a Calle 1/)
   env.ok('clientes_delete', { id: c.id }, sa)
-  assert.equal(ultima(env, 'Cliente eliminado').usuario, 'superadmin')
+  assert.equal(ultima(env, 'Cliente eliminado').usuario, 'dueno')
 })
 
 test('sesión y usuarios: ingresos, cambios de clave, altas y bloqueos (sin llenar la bitácora de intentos fallidos)', () => {
-  const env = crearEntorno()
-  const { token } = env.ok('login', { usuario: 'superadmin', clave: CLAVE_INICIAL })
-  assert.equal(ultima(env, 'Usuario inicial creado').usuario, 'Sistema')
-  assert.equal(ultima(env, 'Inicio de sesión').usuario, 'superadmin')
+  const { env, sa } = conEmpresa(crearEntorno())
+  assert.equal(ultima(env, 'Superadministrador creado').usuario, 'superadmin') // el root
+  assert.equal(ultima(env, 'Inicio de sesión').usuario, 'dueno')
+  assert.equal(ultima(env, 'Cambio de clave').usuario, 'dueno')
+  const raiz = env.principal.getSheetByName('Bitácora').filas.map((f) => f[4])
+  assert.ok(raiz.includes('Usuario inicial creado')) // lo que no es de ninguna empresa queda en la hoja principal
 
-  const sa = env.ok('cambiar_clave', { actual: CLAVE_INICIAL, nueva: 'Nueva-Super-2026' }, token).token
-  assert.equal(ultima(env, 'Cambio de clave').usuario, 'superadmin')
-
-  const u = env.ok('usuarios_create', { data: { usuario: 'ana', nombre: 'Ana', rol: 'tecnico', clave: 'Temporal-2026' } }, sa)
+  const u = env.ok('usuarios_create', { data: datosUsuario('ana', 'tecnico', 20) }, sa)
   assert.match(ultima(env, 'Usuario creado').detalle, /ana \(tecnico\)/)
 
   env.ok('usuarios_update', { id: u.id, data: { activo: false, rol: 'admin' } }, sa)
   assert.match(ultima(env, 'Usuario modificado').detalle, /Rol: de tecnico a admin; Desactivado/)
   env.ok('usuarios_update', { id: u.id, data: { clave: 'Restablecida-88' } }, sa)
-  assert.equal(ultima(env, 'Clave restablecida').usuario, 'superadmin')
+  assert.equal(ultima(env, 'Clave restablecida').usuario, 'dueno')
 
   // los intentos fallidos NO se registran uno a uno (cualquiera podría llenar la hoja); solo el bloqueo, una vez
   const antes = bitacora(env).length

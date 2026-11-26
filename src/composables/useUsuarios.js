@@ -35,5 +35,11 @@ export function useUsuarios() {
       return u
     })
 
-  return { usuarios: readonly(usuarios), cargando: readonly(cargando), error: readonly(error), cargar, crear, actualizar }
+  const eliminar = (id) =>
+    run(async () => {
+      await call('usuarios_delete', { id })
+      usuarios.value = usuarios.value.filter((x) => x.id !== id)
+    })
+
+  return { usuarios: readonly(usuarios), cargando: readonly(cargando), error: readonly(error), cargar, crear, actualizar, eliminar }
 }

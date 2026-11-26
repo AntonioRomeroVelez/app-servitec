@@ -1,5 +1,6 @@
-// Compresión de fotos en el dispositivo antes de subirlas: se reduce el lado mayor y se re-codifica
-// como JPEG, manteniendo texto y detalles legibles (típicamente 150-400 KB en lugar de 3-8 MB).
+// Compresión de fotos en el dispositivo antes de subirlas, para ocupar el menor espacio posible en Drive sin perder
+// legibilidad: se reduce el lado mayor y se re-codifica como JPEG con un peso objetivo de 200 KB (una foto de cámara
+// suele pesar 3-8 MB). El JPEG además descarta los metadatos de la cámara.
 
 const leerComoDataUrl = (blob) =>
   new Promise((res, rej) => {
@@ -51,33 +52,61 @@ const aBlob = (canvas, calidad) => new Promise((res) => canvas.toBlob(res, 'imag
  * @returns {{ imagen: string, mini: string, bytes: number, ancho: number, alto: number }}
  *  imagen: JPEG en base64 (sin prefijo data:), mini: miniatura como data URL
  */
-export async function comprimirImagen(file, { ladoMax = 1600, calidad = 0.75, maxBytes = 500 * 1024 } = {}) {
+export async function comprimirImagen(file, { ladoMax = 1280, ladoMin = 960, calidad = 0.72, calidadMin = 0.5, maxBytes = 200 * 1024 } = {}) {
   if (!file.type.startsWith('image/')) throw new Error(`"${file.name}" no es una imagen`)
   if (file.size > 30 * 1024 * 1024) throw new Error(`"${file.name}" pesa demasiado (máx. 30 MB)`)
 
   const src = await cargarImagen(file)
-  const canvas = dibujar(src, ladoMax)
 
-  // Baja la calidad por pasos (hasta 0.5, donde el texto aún se lee bien) si supera el peso objetivo
-  let q = calidad
-  let blob = await aBlob(canvas, q)
-  while (blob.size > maxBytes && q > 0.5) {
-    q -= 0.08
+  // Primero baja la calidad (hasta 0.5, donde el texto aún se lee); si sigue pesando, achica la foto (hasta 960 px)
+  let lado = ladoMax
+  let canvas
+  let blob
+  for (;;) {
+    canvas = dibujar(src, lado)
+    let q = calidad
     blob = await aBlob(canvas, q)
+    while (blob.size > maxBytes && q > calidadMin) {
+      q = Math.max(calidadMin, q - 0.07)
+      blob = await aBlob(canvas, q)
+    }
+    if (blob.size <= maxBytes || lado <= ladoMin) break
+    lado = Math.max(ladoMin, lado - 160)
   }
 
-  // Miniatura para la galería (debe caber holgada en una celda de Google Sheets)
-  let lado = 240
+  // Miniatura para la galería: se guarda en una celda de la hoja de la empresa, por eso es muy pequeña
+  let ladoMini = 200
   let mini = ''
   for (;;) {
-    mini = await leerComoDataUrl(await aBlob(dibujar(src, lado), 0.5))
-    if (mini.length < 40000 || lado <= 120) break
-    lado -= 40
+    mini = await leerComoDataUrl(await aBlob(dibujar(src, ladoMini), 0.5))
+    if (mini.length < 20000 || ladoMini <= 120) break
+    ladoMini -= 40
   }
   src.close?.()
 
   const dataUrl = await leerComoDataUrl(blob)
   return { imagen: dataUrl.split(',')[1], mini, bytes: blob.size, ancho: canvas.width, alto: canvas.height }
+}
+
+/**
+ * Prepara la foto de fondo del ingreso: JPEG que cabe en una celda de Sheets (menos de ~44.000 caracteres). Se muestra
+ * oscurecida detrás del formulario, así que admite poca resolución. Devuelve un data URL.
+ */
+export async function procesarFondo(file, { maxCaracteres = 44000 } = {}) {
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type)) throw new Error('Elige una foto JPG, PNG o WebP')
+  if (file.size > 30 * 1024 * 1024) throw new Error('La foto pesa demasiado (máximo 30 MB)')
+  const src = await cargarImagen(file)
+  for (const lado of [1200, 1000, 840, 700, 560, 440]) {
+    const canvas = dibujar(src, lado)
+    for (const calidad of [0.6, 0.45, 0.32]) {
+      const url = await leerComoDataUrl(await aBlob(canvas, calidad))
+      if (url.length <= maxCaracteres) {
+        src.close?.()
+        return url
+      }
+    }
+  }
+  throw new Error('No se pudo reducir la foto lo suficiente. Prueba con otra.')
 }
 
 /**

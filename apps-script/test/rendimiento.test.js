@@ -8,9 +8,9 @@ import { entornoListo, datosVisita, JPEG_B64, MINI } from './ayudas.js'
 const N = 20000 // informes
 const NV = 10000 // visitas
 const NF = 5000 // fotos
-const COLS_INFORMES = 17 // columnas totales (lo que leía el diseño anterior por fila)
-const LIGERAS_INFORMES = 14
-const COLS_VISITAS = 16
+const COLS_INFORMES = 18 // columnas totales (lo que leía el diseño anterior por fila)
+const LIGERAS_INFORMES = 15 // las 14 livianas más la empresa
+const COLS_VISITAS = 17
 
 const autores = ['lucia', 'marta', 'carlos', 'diego']
 const firma = 'data:image/png;base64,' + 'A'.repeat(10000) // una firma real pesa ~10 KB
@@ -22,17 +22,18 @@ function sembrar({ env, sa }) {
   // Se crean las hojas llamando una vez a cada listado; luego se rellenan directamente (más rápido que 30 mil POST)
   env.ok('informes_list', {}, sa)
   env.ok('visitas_list', {}, sa)
+  const empresa = env.hoja('Empresas').filas[1][0]
   const informes = env.hoja('Informes')
   const visitas = env.hoja('Visitas')
   const iso = (i) => new Date(Date.UTC(2024, 0, 1) + i * 60000).toISOString()
 
   const propietarioVisita = (i) => (i % 3 === 0 ? 'lucia' : 'marta')
   for (let i = 0; i < NV; i++) {
-    visitas.filas.push([`v${i}`, fechaDe(i), '09:00', `Cliente ${i % 500}`, 'Av. Principal 123', '', 'Visita técnica', i % 2 ? 'carlos' : 'diego', 'Programada', '', propietarioVisita(i), iso(i), propietarioVisita(i), iso(i), '', ''])
+    visitas.filas.push([`v${i}`, fechaDe(i), '09:00', `Cliente ${i % 500}`, 'Av. Principal 123', '', 'Visita técnica', i % 2 ? 'carlos' : 'diego', 'Programada', '', propietarioVisita(i), iso(i), propietarioVisita(i), iso(i), '', '', empresa])
   }
   for (let i = 0; i < N; i++) {
     const visitaId = i % 2 ? `v${i % NV}` : ''
-    informes.filas.push([`i${i}`, fechaDe(i), `Cliente ${i % 500}`, `Informe ${i}`, 'Visita técnica', i % 4 === 0 ? 'Finalizado' : 'Borrador', autores[i % 4], autores[i % 4], iso(i), autores[i % 4], iso(i), visitaId, `INF-2020-${String(i + 1).padStart(5, '0')}`, 'Cliente', descripcion, checklist, firma])
+    informes.filas.push([`i${i}`, fechaDe(i), `Cliente ${i % 500}`, `Informe ${i}`, 'Visita técnica', i % 4 === 0 ? 'Finalizado' : 'Borrador', autores[i % 4], autores[i % 4], iso(i), autores[i % 4], iso(i), visitaId, `INF-2020-${String(i + 1).padStart(5, '0')}`, 'Cliente', descripcion, checklist, firma, empresa])
   }
   return { propietarioVisita }
 }
@@ -50,7 +51,7 @@ const fmt = (m) => `${m.celdas.toLocaleString('es')} celdas (${mb(m.caracteres)}
 test(`con ${N.toLocaleString('es')} informes y ${NV.toLocaleString('es')} visitas las consultas siguen siendo baratas`, (t) => {
   const e = entornoListo()
   const { env, sa, admin, tec } = e
-  const { propietarioVisita } = sembrar(e)
+  sembrar(e)
 
   const naivoCeldas = N * COLS_INFORMES
   const naivoBytes = N * (firma.length + checklist.length + descripcion.length + 300)
@@ -78,18 +79,11 @@ test(`con ${N.toLocaleString('es')} informes y ${NV.toLocaleString('es')} visita
   const fechas = lSa.r.items.map((x) => x.fecha)
   assert.deepEqual(fechas, [...fechas].sort().reverse())
 
-  // 3) Listado de informes, admin: además consulta qué visitas agendó (2 columnas de Visitas)
+  // 3) Listado de informes, admin: ve todos los de su empresa, sin consultar Visitas
   const lAd = medir(env, () => env.ok('informes_list', { limit: 50 }, admin.token))
   t.diagnostic(`informes_list (admin)       -> ${fmt(lAd)}`)
-  assert.ok(lAd.celdas <= N * LIGERAS_INFORMES + 2 * NV + 100)
-  // Resultado correcto: sus informes + los de las visitas que agendó (comprobado contra los datos sembrados)
-  let esperadosAdmin = 0
-  for (let i = 0; i < N; i++) {
-    const suyo = autores[i % 4] === 'lucia'
-    const deSuVisita = i % 2 === 1 && propietarioVisita(i % NV) === 'lucia'
-    if (suyo || deSuVisita) esperadosAdmin++
-  }
-  assert.equal(lAd.r.total, esperadosAdmin)
+  assert.ok(lAd.celdas <= N * LIGERAS_INFORMES + 100)
+  assert.equal(lAd.r.total, N)
 
   // 4) Listado, técnico: solo los suyos, sin consultar Visitas
   const lTec = medir(env, () => env.ok('informes_list', { limit: 50 }, tec.token))
@@ -109,17 +103,17 @@ test(`con ${N.toLocaleString('es')} informes y ${NV.toLocaleString('es')} visita
   assert.equal(get.r.firma, firma)
   assert.ok(get.celdas <= N + COLS_INFORMES + 5)
 
-  // i3: lo escribió diego, pero es de la visita v3 que agendó lucia -> el admin lo ve (consulta esa visita, no todas)
+  // i3: lo escribió diego -> el admin lo ve sin consultar la hoja Visitas
   const getAd = medir(env, () => env.ok('informes_get', { id: 'i3' }, admin.token))
-  t.diagnostic(`informes_get (admin, de su visita) -> ${fmt(getAd)}`)
+  t.diagnostic(`informes_get (admin) -> ${fmt(getAd)}`)
   assert.equal(getAd.r.autor, 'diego')
-  assert.ok(getAd.celdas <= N + NV + COLS_INFORMES + COLS_VISITAS + 10)
+  assert.ok(getAd.celdas <= N + COLS_INFORMES + 10)
 
-  // i1: de marta y de una visita de marta -> lucia no debe verlo (y negarlo también es barato)
-  const getNo = medir(env, () => env.llamar('informes_get', { id: 'i1' }, admin.token))
-  t.diagnostic(`informes_get (admin, ajeno)      -> ${fmt(getNo)}`)
+  // i1: lo escribió marta -> un técnico no debe verlo (y negarlo también es barato)
+  const getNo = medir(env, () => env.llamar('informes_get', { id: 'i1' }, tec.token))
+  t.diagnostic(`informes_get (técnico, ajeno)   -> ${fmt(getNo)}`)
   assert.equal(getNo.r.ok, false)
-  assert.ok(getNo.celdas <= N + NV + COLS_INFORMES + COLS_VISITAS + 10)
+  assert.ok(getNo.celdas <= N + COLS_INFORMES + 10)
 
   // 7) Visitas: ventana de fechas
   const vis = medir(env, () => env.ok('visitas_list', { desde: '2026-01-01', limit: 200 }, admin.token))
@@ -133,10 +127,10 @@ test(`con ${N.toLocaleString('es')} informes y ${NV.toLocaleString('es')} visita
   t.diagnostic(`visitas_update              -> ${fmt(upd)}`)
   assert.ok(upd.celdas <= NV + COLS_VISITAS + 10)
 
-  // 9) Crear informe: el correlativo se calcula leyendo solo la columna numero
+  // 9) Crear informe: el correlativo (por empresa) se calcula leyendo solo las columnas numero y empresaId
   const cre = medir(env, () => env.ok('informes_create', { data: { fecha: '2026-11-20', cliente: 'X', titulo: 'Nuevo', tipo: 'Otro', estado: 'Borrador', responsable: '', descripcion: '', checklist: '', firma: '', firmante: '', visitaId: '' } }, sa))
   t.diagnostic(`informes_create             -> ${fmt(cre)}`)
-  assert.ok(cre.celdas <= N + 50)
+  assert.ok(cre.celdas <= 2 * N + 100)
 
   // 10) Fotos: se leen la columna visitaId y solo las filas de esa visita (no las miniaturas de las demás)
   const v = env.ok('visitas_create', { data: datosVisita() }, admin.token)

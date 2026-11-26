@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { CalendarPlus, CalendarDays, FilePlus2, Building2, TriangleAlert, RefreshCw, Wrench } from 'lucide-vue-next'
+import { CalendarPlus, CalendarDays, FilePlus2, Building2, TriangleAlert, RefreshCw, Wrench, Settings, ShieldCheck } from 'lucide-vue-next'
 import { call } from '../api'
 import { useAuth } from '../composables/useAuth'
 import { useConfiguracion } from '../composables/useConfiguracion'
@@ -13,7 +13,7 @@ import { fechaLarga, hoy, manana } from '../utils'
 // Inicio de la app: cifras de lo que importa hoy según el rol (el técnico solo ve lo suyo; la plataforma ve además sus empresas),
 // un gráfico de las visitas de la semana, las próximas visitas y los últimos informes. Cada cifra lleva a su lista filtrada.
 const emit = defineEmits(['agenda', 'informes', 'ir', 'visita', 'informe', 'nuevaVisita', 'nuevoInforme'])
-const { usuario, puedeAgendar, esSuper, esPlataforma } = useAuth()
+const { usuario, puedeAgendar, esSuper, esPlataforma, esRoot, sinOperacion } = useAuth()
 const { empresa } = useConfiguracion()
 
 const datos = ref(null)
@@ -61,7 +61,7 @@ const tiles = computed(() => {
     { id: 'borr', texto: 'Informes en borrador', valor: d.informesBorrador, ir: () => emit('informes', 'Borrador') },
     { id: 'fin', texto: 'Finalizados este mes', valor: d.informesFinalizadosMes, ir: () => emit('informes', 'Finalizado') },
     { id: 'cli', texto: 'Clientes', valor: d.clientes, ir: () => emit('ir', 'clientes') },
-    { id: 'tec', texto: 'Técnicos activos', valor: d.tecnicos, ir: esSuper.value ? () => emit('ir', 'usuarios') : null },
+    { id: 'tec', texto: 'Técnicos activos', valor: d.tecnicos, ir: () => emit('ir', 'usuarios') },
   ]
 })
 
@@ -90,7 +90,7 @@ const pl = computed(() => datos.value?.plataforma)
     <header class="flex items-start justify-between gap-3">
       <div class="min-w-0">
         <h2 class="truncate text-xl font-bold text-brand-900">{{ saludo }}<template v-if="nombre">, {{ nombre }}</template></h2>
-        <p class="text-sm text-brand-700 first-letter:uppercase">{{ fechaLarga(hoy()) }} · {{ empresa.nombre }}</p>
+        <p class="text-sm text-brand-700 first-letter:uppercase">{{ fechaLarga(hoy()) }}<template v-if="!esRoot"> · {{ empresa.nombre }}</template></p>
       </div>
       <button class="flex size-10 shrink-0 items-center justify-center rounded-xl border border-brand-200 bg-white text-brand-700" aria-label="Actualizar" :disabled="cargando" @click="cargar">
         <RefreshCw :size="18" :class="{ 'animate-spin': cargando }" aria-hidden="true" />
@@ -98,7 +98,7 @@ const pl = computed(() => datos.value?.plataforma)
     </header>
 
     <!-- Accesos rápidos -->
-    <div class="flex flex-wrap gap-2">
+    <div v-if="!sinOperacion" class="flex flex-wrap gap-2">
       <button v-if="puedeAgendar" class="btn min-h-10 flex-none text-sm" @click="$emit('nuevaVisita')"><CalendarPlus :size="16" aria-hidden="true" />Nueva visita</button>
       <button class="btn-borde min-h-10 flex-none text-sm" @click="$emit('nuevoInforme')"><FilePlus2 :size="16" aria-hidden="true" />Nuevo informe</button>
       <button class="btn-borde min-h-10 flex-none text-sm" @click="$emit('agenda', 'proximas')"><CalendarDays :size="16" aria-hidden="true" />Agenda</button>
@@ -108,6 +108,7 @@ const pl = computed(() => datos.value?.plataforma)
     <p v-else-if="!datos" class="py-10 text-center text-brand-700">Cargando…</p>
 
     <template v-else>
+      <template v-if="!sinOperacion">
       <!-- Aviso de visitas atrasadas -->
       <button v-if="datos.atrasadas" class="flex items-center gap-2 rounded-xl bg-amber-100 px-3 py-2.5 text-left text-sm font-medium text-amber-900" @click="$emit('agenda', 'pasadas')">
         <TriangleAlert :size="18" class="shrink-0" aria-hidden="true" />
@@ -115,7 +116,7 @@ const pl = computed(() => datos.value?.plataforma)
       </button>
 
       <!-- Cifras -->
-      <ul class="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+      <ul class="grid grid-cols-2 gap-2.5 sm:grid-cols-4 xl:grid-cols-8">
         <li v-for="t in tiles" :key="t.id">
           <component :is="t.ir ? 'button' : 'div'" class="tarjeta grid h-full w-full gap-0.5 text-left" :class="t.ir ? 'active:bg-brand-50' : ''" @click="t.ir && t.ir()">
             <span class="text-xs text-brand-700">{{ t.texto }}</span>
@@ -174,7 +175,19 @@ const pl = computed(() => datos.value?.plataforma)
         </div>
       </div>
 
-      <!-- Plataforma (solo su superadmin) -->
+      </template>
+
+      <!-- Superadministrador: solo personaliza la empresa y gestiona a sus administradores -->
+      <div v-if="esSuper" class="tarjeta grid gap-2">
+        <h3 class="font-semibold text-brand-800">Tu empresa</h3>
+        <p class="text-sm text-brand-700">Personaliza sus datos, logo, colores e informes, y crea la cuenta de su administrador.</p>
+        <div class="flex flex-wrap gap-2">
+          <button class="btn min-h-10 flex-none text-sm" @click="$emit('ir', 'ajustes')"><Settings :size="16" aria-hidden="true" />Personalizar la empresa</button>
+          <button class="btn-borde min-h-10 flex-none text-sm" @click="$emit('ir', 'usuarios')"><ShieldCheck :size="16" aria-hidden="true" />Administradores</button>
+        </div>
+      </div>
+
+      <!-- Empresas (solo el root) -->
       <div v-if="esPlataforma && pl" class="tarjeta grid gap-2">
         <div class="flex items-center justify-between">
           <h3 class="flex items-center gap-2 font-semibold text-brand-800"><Building2 :size="18" aria-hidden="true" />Plataforma</h3>

@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { leerChecklist, RESULTADOS } from '../plantillas'
+import { leerChecklist, textoResultado } from '../plantillas'
 import { useFotos } from '../composables/useFotos'
 import { useAuth } from '../composables/useAuth'
 import { useToast } from '../composables/useToast'
@@ -16,17 +16,16 @@ const props = defineProps({ informe: { type: Object, required: true } })
 defineEmits(['editar', 'eliminar'])
 
 const { lista, cargar, obtener } = useFotos()
-const { esSuper, usuario } = useAuth()
+const { puedeAgendar, usuario } = useAuth() // los administradores también editan y eliminan informes finalizados
 const { empresa, logo, tema, informes: cfgInformes } = useConfiguracion()
 const toast = useToast()
 
 const checklist = computed(() => leerChecklist(props.informe.checklist))
-const textoResultado = (id) => RESULTADOS.find((r) => r.id === id)?.texto ?? 'Sin responder'
-const claseResultado = (id) => ({ ok: 'bg-emerald-100 text-emerald-800', falla: 'bg-red-100 text-red-800', na: 'bg-brand-100 text-brand-800' })[id] ?? 'bg-brand-50 text-brand-700/70'
+const claseResultado = (id) => ({ ok: 'bg-emerald-100 text-emerald-800', no: 'bg-amber-100 text-amber-800', falla: 'bg-red-100 text-red-800', na: 'bg-brand-100 text-brand-800' })[id] ?? 'bg-brand-50 text-brand-700/70'
 
 // Finalizado = cerrado: solo el superadmin puede editarlo o eliminarlo
-const cerrado = computed(() => props.informe.estado === 'Finalizado' && !esSuper.value)
-const puedeEliminar = computed(() => esSuper.value || (props.informe.autor === usuario.value.usuario && props.informe.estado !== 'Finalizado'))
+const cerrado = computed(() => props.informe.estado === 'Finalizado' && !puedeAgendar.value)
+const puedeEliminar = computed(() => puedeAgendar.value || (props.informe.autor === usuario.value.usuario && props.informe.estado !== 'Finalizado'))
 
 // --- PDF: archivo real (A4) con el logo y los datos de la empresa como encabezado, fotos de la visita y firma ---
 const preparando = ref(false)
@@ -90,10 +89,10 @@ async function descargarPdf() {
     </div>
 
     <section v-if="checklist.length" class="grid gap-1.5">
-      <h3 class="font-semibold text-brand-800">Checklist</h3>
+      <h3 class="font-semibold text-brand-800">Actividades realizadas</h3>
       <ul class="divide-y divide-brand-100 rounded-xl border border-brand-100">
         <li v-for="c in checklist" :key="c.item" class="flex items-start justify-between gap-3 px-3 py-2 text-sm break-inside-avoid">
-          <span>
+          <span class="min-w-0 break-words whitespace-pre-line">
             {{ c.item }}
             <span v-if="c.obs" class="block text-xs text-brand-700/80">Obs.: {{ c.obs }}</span>
           </span>

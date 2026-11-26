@@ -15,13 +15,38 @@ npm run build
 
 En modo demo hay tres usuarios: `superadmin` / `superadmin123`, `admin` / `admin123` y `tecnico` / `tecnico123`.
 
-## Roles
+## Roles (con Google Sheets)
 
 | Rol | Permisos |
 | --- | --- |
-| `tecnico` | Ve solo las visitas que le **asignaron**. Las **acepta** o **cancela** (con motivo), las inicia y las finaliza, y crea informes (ve solo los suyos). No agenda, edita ni elimina visitas. |
-| `admin` | Agenda visitas y las asigna a un técnico. Ve, edita y elimina las que agendó, y ve los informes de esas visitas y los propios. |
-| `superadmin` | Ve y gestiona **todas** las visitas e informes y administra usuarios (crear, cambiar clave, activar/desactivar). |
+| **Root** | El dueño del sistema. Solo crea empresas, las habilita o deshabilita y ve a sus superadministradores (usuario y clave temporal) o les restablece la clave. |
+| **Superadministrador** (`superadmin`) | Uno por empresa, para dar soporte. Es el único que cambia sus datos, logo, colores, informes y tipos de visita. Crea al administrador propietario y gestiona administradores. No trabaja con visitas ni informes. |
+| **Administrador** (`admin`) | El propietario de la empresa y los que él cree. Gestiona visitas, informes (también los finalizados) y clientes; crea, edita, desactiva y elimina administradores y técnicos. No cambia los Ajustes ni ve al superadministrador. |
+| **Técnico** (`tecnico`) | Ve las visitas que le asignaron, las acepta, inicia, finaliza o cancela (con motivo) y crea sus informes. |
+
+### Alta de una empresa
+
+1. **Root:** escribe nombre, ciudad, cédula, correo y teléfono. Se crea el superadministrador de esa empresa: su usuario es la primera palabra del nombre (`Alarmas Norte` → `alarmas`) y su **clave temporal es la cédula del root**, que se cambia en el primer ingreso. Todas las empresas nuevas comparten esa clave temporal: ingresa y cámbiala cuanto antes. Las claves se guardan cifradas: no se pueden consultar después.
+2. **Superadministrador:** personaliza la empresa (menú Personalizar la empresa) y crea al administrador (menú Administradores). El primero queda marcado como **Propietario**: puede tener la misma cédula, correo y teléfono que se dieron al crear la empresa, y su cuenta solo la cambian él mismo y el superadministrador.
+3. **Administrador:** crea a sus técnicos y a otros administradores, y trabaja con visitas, informes y clientes.
+
+Fuera de esa excepción, dentro de una empresa no se repiten cédula, correo ni teléfono.
+
+### Dónde se guardan los datos
+
+Cada empresa tiene **su propia hoja de cálculo** y **su propia carpeta en Drive**, en el Drive de quien publica el script:
+
+```
+ServiTec - Empresas/
+  └─ Nombre de la empresa/
+       ├─ ServiTec - Nombre de la empresa      ← hoja: Visitas, Informes, Fotos, Clientes, Notificaciones, Bitácora, Configuración
+       └─ Nombre (usuario)/                    ← una carpeta por quien sube fotos
+            └─ 2026-11/                        ← mes de la visita
+```
+
+La **hoja principal** (la que contiene el script) solo guarda `Empresas` y `Usuarios`, necesarios para iniciar sesión (las claves van cifradas con hash). Cuando este documento menciona la hoja `Visitas`, `Informes`, `Clientes`, `Bitácora`, etc., se refiere a la pestaña dentro de la hoja de cada empresa. No muevas ni borres a mano las hojas de las empresas.
+
+Si venías de una versión con todo en una sola hoja, los datos se **copian** a la hoja de la primera empresa; las pestañas originales no se borran (sirven de respaldo). Para hacerlo desde el editor, y autorizar los permisos nuevos, ejecuta `aplicarFormatos`.
 
 ## Conectar con Google Sheets
 
@@ -32,6 +57,10 @@ En modo demo hay tres usuarios: `superadmin` / `superadmin123`, `admin` / `admin
 5. Las hojas `Visitas`, `Informes` y `Usuarios` se crean solas. En el primer login se crea el superadmin inicial definido en `SUPERADMIN_INICIAL` (`superadmin` / `Ferisel2026!`). Es una clave **temporal**: la app obliga a cambiarla antes de dejar usar nada.
 
 Si cambias `Code.gs`, crea una **nueva versión** de la implementación.
+
+La app usa Google Sheets solo si **no** está definida `VITE_SUPABASE_URL` (Supabase tiene prioridad): quítala o coméntala en `.env` y en las variables del hosting, y vuelve a compilar.
+
+**Usuarios.** Se piden nombres completos, cédula, correo, teléfono y ciudad; la clave temporal es la cédula y se cambia en el primer ingreso. El superadmin gestiona a todos; el admin, solo a los técnicos. En una hoja `Usuarios` anterior las columnas nuevas se agregan solas al final. Cada fila guarda quién la creó (`autor`) y quién la modificó (`modificadoPor`).
 
 ## Estructura
 
@@ -56,7 +85,7 @@ Cualquier usuario puede cambiar su clave desde el menú: **Mi cuenta → Cambiar
 
 **Si ya habías creado hojas con una versión anterior**, bórralas antes de usar esta versión para que se recreen solas con el orden de columnas actual (las columnas pesadas van al final y cada registro guarda quién lo creó y quién lo modificó): `Visitas`, `Informes`, `Fotos` y `Notificaciones`. Se pierden los datos de prueba que tuvieran. **No borres `Usuarios`** (ahí están tus usuarios); esa hoja no cambió. Se crean además `Clientes` y `Bitácora`. Si prefieres conservar datos en una hoja con el orden de columnas correcto, ejecuta `aplicarFormatos` (ver más abajo).
 
-**Crear el primer superadmin sin usar la clave genérica.** Antes del primer ingreso, en Apps Script define las propiedades de la secuencia de comandos (Configuración del proyecto) `SUPERADMIN_USUARIO`, `SUPERADMIN_CLAVE` (temporal) y, si quieres, `SUPERADMIN_NOMBRE`, y ejecuta la función `crearSuperadmin`. Crea ese usuario (con cambio de clave obligatorio al ingresar), evita que se genere el `superadmin` con clave pública y borra la clave de las propiedades. Nada de esto queda escrito en el código. Si un usuario no logra entrar, `diagnosticoUsuarios` explica por qué sin mostrar claves.
+**Crear el primer superadmin sin usar la clave genérica.** Así se crea el usuario root. Además es obligatoria `SUPERADMIN_CEDULA`. Antes del primer ingreso, en Apps Script define las propiedades de la secuencia de comandos (Configuración del proyecto) `SUPERADMIN_USUARIO`, `SUPERADMIN_CLAVE` (temporal), `SUPERADMIN_CEDULA` y, si quieres, `SUPERADMIN_NOMBRE`, y ejecuta la función `crearSuperadmin`. Crea ese usuario (con cambio de clave obligatorio al ingresar), evita que se genere el `superadmin` con clave pública y borra la clave de las propiedades. Nada de esto queda escrito en el código. Si un usuario no logra entrar, `diagnosticoUsuarios` explica por qué sin mostrar claves.
 
 ## Ajustes: personalizar la app (superadmin)
 
@@ -65,9 +94,9 @@ La pestaña **Ajustes** (solo superadmin) permite personalizar la app sin tocar 
 | Sección | Qué se puede cambiar |
 | --- | --- |
 | **Datos de la empresa** | Nombre, subtítulo o eslogan, RUC, dirección, teléfono, correo, sitio web y el pie de los informes. Salen en la pantalla de ingreso, en el encabezado y pie del PDF y en los correos. |
-| **Colores y logo** | Color principal (botones, encabezado) y de acento; de ahí se calcula toda la paleta. Hay combinaciones predefinidas y vista previa en vivo en toda la app antes de guardar. El logo se sube (PNG, JPG, WebP o SVG) y se reduce solo; aparece en el ingreso y en el PDF. |
+| **Colores y logo** | Color principal y de acento (combinaciones predefinidas o **tomados del logo**), color propio para el encabezado y el menú, logo normal y **logo para fondos oscuros**, y fondo del ingreso (degradado, color sólido o una foto). Vista previa del ingreso, el menú y el contenido antes de guardar. Las imágenes se reducen solas porque se guardan en una celda de la hoja. |
 | **Informes** | Prefijo del número (`INF`, `FER`... de 2 a 6 letras o números) y qué incluye el PDF: checklist, observaciones, fotos y firma. |
-| **Tipos de visita y checklists** | Agregar, renombrar, ordenar y quitar tipos (hasta 12) y los ítems de checklist de cada uno (hasta 30). El checklist del tipo se carga solo al crear un informe. |
+| **Tipos de visita y checklists** | Agregar, renombrar, ordenar y quitar tipos (hasta 12) y los ítems de checklist de cada uno (hasta 30). Los dos primeros ítems de cada tipo se muestran como ejemplo en las actividades del informe. |
 
 Cada sección tiene su botón de **valores de fábrica**. Notas:
 
@@ -76,7 +105,13 @@ Cada sección tiene su botón de **valores de fábrica**. Notas:
 - **La lectura de la configuración es pública** (la necesita la pantalla de ingreso antes de iniciar sesión) y solo contiene datos de marca. Modificarla exige ser superadmin y se valida en el servidor.
 - Se guarda una copia en el dispositivo: la marca aparece al instante y también sin conexión.
 - El nombre y los iconos de la app **instalada** en el celular (manifiesto) son fijos; cambian al volver a instalarla con una versión nueva. Para cambiar los iconos edita `scripts/generar-iconos.mjs` y vuelve a generarlos.
-- La hoja `Configuración` se crea sola. Si prefieres editarla a mano, cada fila es una sección (`empresa`, `tema`, `logo`, `informes`, `tipos`) con su valor en JSON; un valor dañado se ignora y se usa el de fábrica.
+- La hoja `Configuración` se crea sola. Si prefieres editarla a mano, cada fila es una sección (`empresa`, `tema`, `logo`, `logoClaro`, `fondoImagen`, `informes`, `tipos`) con su valor en JSON; un valor dañado se ignora y se usa el de fábrica.
+
+**En computadora** todas las vistas usan el ancho completo y las listas se reparten en columnas.
+
+**Cómo se ven los Ajustes.** El menú **Personalizar la empresa** abre una portada con una tarjeta por sección; cada una tiene su pantalla y avisa si sales sin guardar. **Ver un informe de ejemplo (PDF)** muestra el resultado con lo que se está editando, aunque no se haya guardado.
+
+**Marca en la pantalla de ingreso.** Se ven el logo y los colores de la empresa en los dispositivos que ya ingresaron alguna vez, y en los que abren el enlace o el código QR de **Instalar la app** (lleva `?empresa=...`). Un dispositivo nuevo que entra por la dirección simple ve la marca general hasta su primer ingreso. Sin sesión solo se entregan los datos de la empresa, sus colores y su logo.
 
 ## Clientes
 
@@ -180,28 +215,21 @@ No insertes ni reordenes columnas en las hojas, ni ordenes las filas a mano: el 
 npm run test:gs
 ```
 
-Son 98 pruebas: login, bloqueo y cambio obligatorio de clave, permisos por rol, flujo de estados, informes (numeración y cierre), fotos y carpetas de Drive, paginación, notificaciones y correos, recordatorios, idempotencia, clientes, bitácora y formatos de fecha, configuración y colores, el modo sin conexión completo (capa real + IndexedDB simulado + red que se corta o pierde respuestas) y una prueba de escala con 20.000 informes que imprime cuántas celdas lee cada operación. No miden la latencia real de Google; sirven para comprobar la lógica sin publicar el script.
+Son 167 pruebas: login, bloqueo y cambio obligatorio de clave, permisos por rol, flujo de estados, informes (numeración y cierre), fotos y carpetas de Drive, paginación, notificaciones y correos, recordatorios, idempotencia, clientes, bitácora y formatos de fecha, configuración y colores, el modo sin conexión completo (capa real + IndexedDB simulado + red que se corta o pierde respuestas) y una prueba de escala con 20.000 informes que imprime cuántas celdas lee cada operación. No miden la latencia real de Google; sirven para comprobar la lógica sin publicar el script.
 
 ## Informes
 
 - **Número correlativo** por año (`INF-2026-0001`), asignado por el backend.
-- **Checklist por tipo de visita** (`src/plantillas.js`): cada ítem se marca Cumple / Falla / N/A; una falla exige observación. Se guarda como JSON en la columna `checklist`.
+- **Actividades realizadas** (`src/plantillas.js`): un informe nuevo empieza con dos casillas vacías (con un ejemplo del tipo de visita como texto de ayuda); el técnico escribe lo que hizo, agrega las que necesite o las quita, y marca cada una como Cumple / No cumple / Falla. Se guardan como JSON en la columna `checklist`.
 - **Firma del cliente** (dibujada en pantalla, PNG pequeño) y nombre de quien recibe.
-- **Finalizado = cerrado:** para finalizar hay que responder todo el checklist. Después solo el superadmin puede editarlo o eliminarlo (se valida en `Code.gs`).
+- **Finalizado = cerrado:** para finalizar, cada actividad necesita descripción y resultado. Después solo un administrador puede editarlo o eliminarlo (se valida en `Code.gs`).
 - **PDF:** el botón "Descargar PDF" genera y descarga un archivo A4 (`INF-0001.pdf`) con el logo y los datos de la empresa como encabezado, checklist, observaciones, fotos de la visita, firma del cliente y pie con numeración de páginas. Lo que incluye se elige en Ajustes > Informes.
 
 ## Fotos de las visitas
 
-Desde el detalle de una visita se pueden agregar fotos (cámara o galería). Antes de subirlas, el dispositivo las reduce a un máximo de 1600 px por lado y las re-codifica en JPEG (típicamente 150-400 KB), de modo que el texto y los detalles siguen siendo legibles.
+Desde el detalle de una visita se pueden agregar fotos (cámara o galería). Antes de subirlas, el dispositivo las reduce a un máximo de 1280 px por lado y las re-codifica en JPEG buscando que pesen hasta 200 KB (baja la calidad y, si hace falta, el tamaño hasta 960 px). Una foto con muchísimo detalle puede quedar algo por encima.
 
-En Drive se guardan así, en el Drive de la cuenta que publica el script:
-
-```
-Informes Ferisel - Fotos/
-  └─ Nombre (usuario)/        ← una carpeta por administrador y por técnico (quien sube la foto)
-       └─ 2026-11/            ← mes de la visita
-            └─ 2026-11-19_cliente_a1b2c3.jpg
-```
+En Drive se guardan dentro de la carpeta de su empresa: `Nombre (usuario) / AAAA-MM de la visita / 2026-11-19_cliente_a1b2c3.jpg`.
 
 - Las fotos son **privadas** en Drive (no se comparten por enlace). La app las muestra mediante el script, respetando los permisos de cada rol.
 - Las miniaturas se guardan en la hoja `Fotos` junto con el ID del archivo en Drive.

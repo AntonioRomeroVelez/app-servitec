@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 
 // Gráfico de columnas de UNA serie (p. ej. visitas por día). Sin leyenda (el título dice qué se mide), barras finas con el
 // extremo redondeado y la base recta, cuadrícula discreta, valor solo en el máximo y en el elemento destacado, tooltip al
@@ -11,13 +11,22 @@ const props = defineProps({
   alto: { type: Number, default: 170 },
 })
 
-const W = 560
+// El ancho del dibujo es el del contenedor: así la altura y el tamaño del texto no crecen en pantallas anchas
+const raiz = ref(null)
+const W = ref(560)
+let observador
+onMounted(() => {
+  if (typeof ResizeObserver === 'undefined') return
+  observador = new ResizeObserver(([e]) => (W.value = Math.max(320, Math.round(e.contentRect.width))))
+  observador.observe(raiz.value)
+})
+onBeforeUnmount(() => observador?.disconnect())
 const M = { arriba: 16, abajo: 38, izq: 26, der: 6 }
 const base = computed(() => props.alto - M.abajo)
 const maximo = computed(() => Math.max(0, ...props.datos.map((d) => d.valor)))
 const techo = computed(() => (maximo.value <= 4 ? 4 : Math.ceil(maximo.value / 4) * 4)) // marcas enteras: 0, mitad, techo
 const marcas = computed(() => [0, techo.value / 2, techo.value])
-const banda = computed(() => (W - M.izq - M.der) / Math.max(1, props.datos.length))
+const banda = computed(() => (W.value - M.izq - M.der) / Math.max(1, props.datos.length))
 const grosor = computed(() => Math.min(18, banda.value - 10))
 const yDe = (v) => M.arriba + (1 - v / techo.value) * (base.value - M.arriba)
 
@@ -38,12 +47,12 @@ const barras = computed(() =>
 const activo = ref(-1)
 const verTabla = ref(false)
 const tip = computed(() => (activo.value >= 0 ? barras.value[activo.value] : null))
-const izquierdaTip = computed(() => (tip.value ? Math.min(88, Math.max(12, (tip.value.cx / W) * 100)) : 0))
+const izquierdaTip = computed(() => (tip.value ? Math.min(88, Math.max(12, (tip.value.cx / W.value) * 100)) : 0))
 const texto = (d) => `${d.detalle}: ${d.valor} ${d.valor === 1 ? props.unidad.replace(/s$/, '') : props.unidad}`
 </script>
 
 <template>
-  <div>
+  <div ref="raiz">
     <div v-if="!verTabla" class="relative" @pointerleave="activo = -1">
       <svg :viewBox="`0 0 ${W} ${alto}`" class="block w-full" role="group" :aria-label="`Gráfico de columnas: ${unidad} por día`">
         <!-- cuadrícula y eje (hairline, sin competir con los datos) -->

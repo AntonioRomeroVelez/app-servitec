@@ -70,6 +70,15 @@ export function paleta(primario) {
 /** Color de texto legible sobre `fondo`: el más oscuro de la paleta o blanco, el que mejor contraste dé */
 export const textoSobre = (fondo, oscuro) => (contraste(fondo, oscuro) >= contraste(fondo, '#ffffff') ? oscuro : '#ffffff')
 
+/** Estilo del fondo de la pantalla de ingreso: degradado de la marca, color sólido o la foto de la empresa (oscurecida). */
+export function estiloFondo(tema = {}, imagen = '') {
+  if (tema.fondo === 'foto' && imagen) {
+    return { backgroundImage: `linear-gradient(rgba(0,0,0,0.45), rgba(0,0,0,0.65)), url("${imagen}")`, backgroundSize: 'cover', backgroundPosition: 'center' }
+  }
+  if (tema.fondo === 'solido') return { backgroundColor: tema.encabezado || 'var(--color-brand-800)' }
+  return { backgroundImage: 'linear-gradient(to bottom, var(--color-brand-900), var(--color-brand-700), var(--color-brand-500))' }
+}
+
 /** Combinaciones listas para elegir */
 export const TEMAS_PREDEFINIDOS = [
   { nombre: 'Azul y amarillo', primario: '#1565d8', acento: '#f6c915' },
@@ -86,9 +95,12 @@ export function aplicarTema(tema = CONFIG_DEFECTO.tema) {
   if (typeof document === 'undefined') return
   const raiz = document.documentElement
   const meta = document.querySelector('meta[name="theme-color"]')
+  // Color propio del encabezado y el menú; sin él se usa el tono 800 de la paleta (definido en style.css)
+  if (tema.encabezado) raiz.style.setProperty('--color-encabezado', tema.encabezado)
+  else raiz.style.removeProperty('--color-encabezado')
   if (tema.primario === CONFIG_DEFECTO.tema.primario && tema.acento === CONFIG_DEFECTO.tema.acento) {
     VARIABLES.forEach((v) => raiz.style.removeProperty(v))
-    meta?.setAttribute('content', '#0b3a85')
+    meta?.setAttribute('content', tema.encabezado || '#0b3a85')
     return
   }
   const p = paleta(tema.primario)
@@ -97,5 +109,5 @@ export function aplicarTema(tema = CONFIG_DEFECTO.tema) {
   raiz.style.setProperty('--color-acento', tema.acento)
   raiz.style.setProperty('--color-acento-600', hslAHex(h, s, l - 8))
   raiz.style.setProperty('--color-acento-texto', textoSobre(tema.acento, p[950]))
-  meta?.setAttribute('content', p[800])
+  meta?.setAttribute('content', tema.encabezado || p[800])
 }

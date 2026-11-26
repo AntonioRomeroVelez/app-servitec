@@ -2,13 +2,15 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import QRCode from 'qrcode'
 import { useConfiguracion } from '../composables/useConfiguracion'
+import { useAuth } from '../composables/useAuth'
 import { enlaceInstalacion, avisosDireccion } from '../plataforma'
 import { APP } from '../app'
 import { Copy, Download, Printer, Share2, TriangleAlert } from 'lucide-vue-next'
 
-// Código QR para instalar la app (admin y superadmin). Lleva a la dirección de la app con ?instalar=1: quien lo escanea ve
+// Código QR para instalar la app (administradores y superadministrador). Incluye la empresa para mostrar su marca. Lleva a la dirección de la app con ?instalar=1: quien lo escanea ve
 // las instrucciones de instalación y luego el ingreso. La dirección se recuerda en este dispositivo.
 const { empresa } = useConfiguracion()
+const { usuario } = useAuth()
 const CLAVE = 'servitec.direccion-qr'
 const guardada = (() => {
   try {
@@ -22,7 +24,7 @@ const imagen = ref('')
 const copiado = ref(false)
 const compartible = typeof navigator.share === 'function'
 
-const enlace = computed(() => enlaceInstalacion(direccion.value))
+const enlace = computed(() => enlaceInstalacion(direccion.value, usuario.value?.empresaId))
 const avisos = computed(() => avisosDireccion(direccion.value))
 
 async function dibujar() {
@@ -59,7 +61,7 @@ function compartir() {
 </script>
 
 <template>
-  <div class="mx-auto grid max-w-md gap-4">
+  <div class="mx-auto grid w-full max-w-md gap-4 lg:max-w-none lg:grid-cols-2 lg:items-start">
     <div class="print:hidden">
       <label class="etiqueta">Dirección de la app
         <input v-model="direccion" class="campo" type="url" inputmode="url" autocapitalize="none" placeholder="https://..." />

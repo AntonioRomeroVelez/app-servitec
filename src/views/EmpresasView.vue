@@ -1,24 +1,20 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted } from 'vue'
-import { Building2, IdCard, KeyRound, Mail, Pencil, Phone, Plus, Power, Settings, Users } from 'lucide-vue-next'
+import { Building2, IdCard, KeyRound, Mail, Phone, Plus, Power, Users } from 'lucide-vue-next'
 import { call } from '../api'
 import { useToast } from '../composables/useToast'
 import { confirmar } from '../composables/useConfirmar'
-import { normalizar, validarClave } from '../utils'
-import CampoClave from '../components/CampoClave.vue'
-import { personaVacia, validarPersona, limpiarPersona } from '../persona'
-import FormularioPersona from '../components/FormularioPersona.vue'
+import { normalizar, motivoCedulaInvalida, correoValido, telefonoValido } from '../utils'
 import CredencialesNuevas from '../components/CredencialesNuevas.vue'
 import BarraFiltros from '../components/BarraFiltros.vue'
 import Paginador from '../components/Paginador.vue'
 import Modal from '../components/Modal.vue'
-import ConfiguracionView from './ConfiguracionView.vue'
 import Avatar from '../components/Avatar.vue'
 import Dato from '../components/Dato.vue'
 import { usePaginaLocal } from '../composables/usePaginaLocal'
 
-// Empresas del SaaS. Solo las crea y edita el superadmin de la plataforma: pone el nombre, llena sus datos y crea
-// su administrador (superadmin de esa empresa), que luego personaliza marca e informes en Ajustes.
+// Empresas del sistema. Solo las ve y administra el root: las crea con su superadministrador, las habilita o deshabilita y
+// restablece la clave de ese superadministrador, que es el único que personaliza cada empresa.
 const toast = useToast()
 const empresas = ref([])
 const cargando = ref(false)
@@ -26,15 +22,20 @@ const guardando = ref(false)
 const error = ref('')
 
 const PLANES = ['prueba', 'basico', 'pro']
-const vacia = () => ({ nombre: '', subtitulo: '', ruc: '', direccion: '', telefono: '', correo: '', web: '', plan: 'prueba', admin: personaVacia() })
+const duenoVacio = () => ({ ciudad: '', cedula: '', correo: '', telefono: '' })
+const vacia = () => ({ nombre: '', ...duenoVacio() })
 const form = reactive(vacia())
-const credenciales = ref(null) // { nombre, usuario, clave } del administrador recién creado
-// El servidor sugiere el usuario del administrador y dice si uno está libre (ve todos los usuarios de la plataforma)
-const sugerir = (nombre, cedula) => call('usuarios_sugerir', { nombre, cedula })
-const disponible = (usuario) => call('usuarios_disponible', { usuario })
+const credenciales = ref(null) // { nombre, usuario, clave } del superadministrador recién creado
 
-const configurando = ref(null) // empresa cuyos Ajustes completos se están editando (la plataforma entra como su superadmin)
-const editando = ref(null) // null = cerrado, 'nueva' = alta, o el id de la empresa que se edita
+// Mensaje del primer dato inválido del dueño, o ''
+const validarDueno = (d) =>
+  motivoCedulaInvalida(d.cedula) ||
+  (!correoValido(d.correo) && 'El correo no es válido') ||
+  (!telefonoValido(d.telefono) && 'El teléfono no es válido (de 7 a 15 dígitos)') ||
+  (!d.ciudad.trim() && 'Escribe la ciudad') ||
+  ''
+
+const creando = ref(false)
 
 async function cargar() {
   cargando.value = true
@@ -65,38 +66,25 @@ const filtradas = computed(() => {
 const pag = usePaginaLocal(filtradas, 10)
 watch([q, estado, plan], pag.volverAlInicio)
 
-function abrir(e) {
+function abrir() {
   Object.assign(form, vacia())
-  if (e) Object.assign(form, { nombre: e.nombre, plan: e.plan, ...Object.fromEntries(['subtitulo', 'ruc', 'direccion', 'telefono', 'correo', 'web'].map((k) => [k, e.datos?.[k] ?? ''])) })
-  editando.value = e ? e.id : 'nueva'
+  creando.value = true
   credenciales.value = null
   error.value = ''
 }
 const cerrar = () => {
-  editando.value = null
+  creando.value = false
   credenciales.value = null
 }
 
 async function guardar() {
-  error.value = ''
-  if (editando.value === 'nueva') {
-    const msg = validarPersona(form.admin)
-    if (msg) return (error.value = msg)
-  }
+  error.value = validarDueno(form)
+  if (error.value) return
   guardando.value = true
   try {
-    const { admin, plan, nombre, ...datos } = form
-    if (editando.value === 'nueva') {
-      const r = await call('empresas_create', { data: { ...form, admin: limpiarPersona(admin) } })
-      credenciales.value = { nombre: admin.nombre.trim(), usuario: r.usuario, clave: admin.cedula.trim() } // la clave temporal es la cédula
-      toast.exito(`Empresa "${nombre}" creada.`)
-      await cargar()
-      return // el modal queda abierto mostrando el usuario generado y la clave temporal
-    } else {
-      await call('empresas_update', { id: editando.value, data: { nombre, plan, datos } })
-      toast.exito('Datos de la empresa guardados.')
-    }
-    cerrar()
+    const r = await call('empresas_create', { data: { ...form } })
+    credenciales.value = { nombre: form.nombre, usuario: r.usuario, clave: r.clave } // el modal queda abierto para entregarlos
+    toast.exito(`Empresa "${form.nombre}" creada.`)
     await cargar()
   } catch (e) {
     error.value = e.message
@@ -105,20 +93,20 @@ async function guardar() {
   }
 }
 
-// ---------- Restablecer la clave del administrador de una empresa (solo la plataforma) ----------
-// Sirve cuando el superadmin de una empresa olvida su clave y nadie de su empresa puede restablecérsela.
-// La clave temporal vuelve a ser su cédula; si no tiene cédula (cuentas antiguas) se escribe una a mano.
+// ---------- Superadministrador de una empresa ----------
+// Las claves se guardan cifradas: se muestra la temporal mientras no la hayan cambiado; si la olvidan, se restablece.
 const adminsDe = ref(null) // empresa abierta
 const admins = ref([])
 const cargandoAdmins = ref(false)
 const errorAdmins = ref('')
-const clavesManuales = reactive({}) // id de administrador -> clave escrita a mano
-const claveRestablecida = ref(null) // { nombre, usuario, clave } para entregar
+const nuevoDueno = reactive(duenoVacio()) // para una empresa que se quedó sin superadministrador
+const claveEntregar = ref(null) // { accion, nombre, usuario, clave }
 
 async function abrirAdmins(e) {
   adminsDe.value = e
   admins.value = []
   errorAdmins.value = ''
+  Object.assign(nuevoDueno, duenoVacio())
   cargandoAdmins.value = true
   try {
     admins.value = await call('empresas_admins', { id: e.id })
@@ -129,20 +117,27 @@ async function abrirAdmins(e) {
   }
 }
 
+async function crearAdmin() {
+  errorAdmins.value = validarDueno(nuevoDueno)
+  if (errorAdmins.value) return
+  const empresa = adminsDe.value
+  try {
+    const r = await call('empresas_create_admin', { id: empresa.id, data: { ...nuevoDueno } })
+    claveEntregar.value = { accion: 'Superadministrador creado', nombre: empresa.nombre, usuario: r.usuario, clave: r.clave }
+    adminsDe.value = null
+    await cargar()
+  } catch (err) {
+    errorAdmins.value = err.message
+  }
+}
+
 async function restablecerAdmin(a) {
   errorAdmins.value = ''
-  const manual = !a.cedula
-  const clave = manual ? String(clavesManuales[a.id] || '') : a.cedula
-  if (manual) {
-    const msg = validarClave(clave, a.usuario)
-    if (msg) return (errorAdmins.value = msg)
-  }
   const quien = `${a.nombre} (@${a.usuario})`
-  if (!(await confirmar({ titulo: '¿Restablecer la clave?', texto: `Se cerrarán las sesiones de ${quien} y deberá crear una clave nueva al ingresar.`, confirmar: 'Restablecer', peligro: true }))) return
+  if (!(await confirmar({ titulo: '¿Restablecer la clave?', texto: `Se cerrarán las sesiones de ${quien}. Su clave temporal será tu cédula y deberá crear una nueva al ingresar.`, confirmar: 'Restablecer', peligro: true }))) return
   try {
-    await call('empresas_restablecer_admin', { id: a.id, clave, temporal: !manual })
-    claveRestablecida.value = { nombre: a.nombre, usuario: a.usuario, clave }
-    clavesManuales[a.id] = ''
+    const r = await call('empresas_restablecer_admin', { id: a.id })
+    claveEntregar.value = { accion: 'Clave restablecida', nombre: a.nombre, usuario: r.usuario, clave: r.clave }
     adminsDe.value = null
   } catch (err) {
     errorAdmins.value = err.message
@@ -180,98 +175,81 @@ async function alternar(e) {
       </select>
     </template>
     <template #acciones>
-      <button class="btn-acento !min-h-10 !px-3 flex-none" aria-label="Nueva empresa" @click="abrir(null)">
+      <button class="btn-acento !min-h-10 !px-3 flex-none" aria-label="Nueva empresa" @click="abrir">
         <Plus :size="18" aria-hidden="true" />
         <span class="sr-only sm:not-sr-only">Nueva</span>
       </button>
     </template>
   </BarraFiltros>
 
-  <p v-if="error && !editando" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+  <p v-if="error && !creando" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
 
-  <Modal v-if="editando" :titulo="credenciales ? 'Empresa creada' : editando === 'nueva' ? 'Nueva empresa' : 'Datos de la empresa'" @cerrar="cerrar">
-  <CredencialesNuevas v-if="credenciales" v-bind="credenciales" @listo="cerrar" />
-  <form v-else class="grid gap-3" @submit.prevent="guardar">
-    <label class="etiqueta">Nombre de la empresa
-      <input v-model.trim="form.nombre" class="campo" required />
-    </label>
-    <label class="etiqueta">Subtítulo (opcional)
-      <input v-model.trim="form.subtitulo" class="campo" />
-    </label>
-    <div class="grid gap-3 sm:grid-cols-2">
-      <label class="etiqueta">RUC
-        <input v-model.trim="form.ruc" class="campo" />
+  <Modal v-if="creando" :titulo="credenciales ? 'Empresa creada' : 'Nueva empresa'" @cerrar="cerrar">
+    <CredencialesNuevas v-if="credenciales" v-bind="credenciales" de-root @listo="cerrar" />
+    <form v-else class="grid gap-3" @submit.prevent="guardar">
+      <label class="etiqueta">Nombre de la empresa
+        <input v-model.trim="form.nombre" class="campo" required maxlength="60" />
+      </label>
+      <label class="etiqueta">Ciudad
+        <input v-model.trim="form.ciudad" class="campo" required />
+      </label>
+      <label class="etiqueta">Cédula
+        <input v-model.trim="form.cedula" class="campo" inputmode="numeric" maxlength="10" required />
+      </label>
+      <label class="etiqueta">Correo
+        <input v-model.trim="form.correo" class="campo" type="email" autocapitalize="none" required />
       </label>
       <label class="etiqueta">Teléfono
-        <input v-model.trim="form.telefono" class="campo" type="tel" />
+        <input v-model.trim="form.telefono" class="campo" type="tel" required />
       </label>
-    </div>
-    <label class="etiqueta">Dirección
-      <input v-model.trim="form.direccion" class="campo" />
-    </label>
-    <div class="grid gap-3 sm:grid-cols-2">
-      <label class="etiqueta">Correo de la empresa
-        <input v-model.trim="form.correo" class="campo" type="email" autocapitalize="none" />
-      </label>
-      <label class="etiqueta">Sitio web
-        <input v-model.trim="form.web" class="campo" autocapitalize="none" />
-      </label>
-    </div>
-    <label class="etiqueta">Plan
-      <select v-model="form.plan" class="campo">
-        <option v-for="p in PLANES" :key="p" :value="p">{{ p }}</option>
-      </select>
-    </label>
-
-    <template v-if="editando === 'nueva'">
-      <h3 class="mt-1 text-sm font-bold text-brand-800">Administrador de la empresa (superadmin)</h3>
-      <FormularioPersona :form="form.admin" nueva-cuenta :sugerir="sugerir" :disponible="disponible" />
-    </template>
-
-    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
-    <button class="btn-acento" :disabled="guardando">{{ guardando ? 'Guardando…' : editando === 'nueva' ? 'Crear empresa' : 'Guardar' }}</button>
-  </form>
+      <p class="text-xs text-brand-700/80">Se crea su superadministrador: el usuario sale del nombre de la empresa y la clave temporal es tu cédula. Él personaliza la empresa y crea al administrador.</p>
+      <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+      <button class="btn-acento" :disabled="guardando">{{ guardando ? 'Creando…' : 'Crear empresa' }}</button>
+    </form>
   </Modal>
 
-  <!-- Ajustes completos de la empresa: datos, colores y logo, informes y tipos de visita -->
-  <Modal v-if="configurando" :titulo="`Ajustes de ${configurando.nombre}`" @cerrar="configurando = null; cargar()">
-    <ConfiguracionView :empresa-id="configurando.id" />
-  </Modal>
-
-  <!-- Administradores de la empresa: restablecer la clave de uno -->
-  <Modal v-if="adminsDe" :titulo="`Administradores de ${adminsDe.nombre}`" @cerrar="adminsDe = null">
+  <!-- Superadministrador de la empresa -->
+  <Modal v-if="adminsDe" :titulo="`Superadministrador de ${adminsDe.nombre}`" @cerrar="adminsDe = null">
     <p v-if="cargandoAdmins" class="py-4 text-center text-brand-700">Cargando…</p>
-    <p v-else-if="!admins.length && !errorAdmins" class="py-4 text-center text-sm text-brand-700/70">Esta empresa no tiene administradores.</p>
-    <ul class="grid gap-3">
+    <form v-else-if="!admins.length" class="grid gap-3" @submit.prevent="crearAdmin">
+      <p class="text-sm text-brand-800">Esta empresa no tiene superadministrador.</p>
+      <label class="etiqueta">Ciudad
+        <input v-model.trim="nuevoDueno.ciudad" class="campo" required />
+      </label>
+      <label class="etiqueta">Cédula
+        <input v-model.trim="nuevoDueno.cedula" class="campo" inputmode="numeric" maxlength="10" required />
+      </label>
+      <label class="etiqueta">Correo
+        <input v-model.trim="nuevoDueno.correo" class="campo" type="email" autocapitalize="none" required />
+      </label>
+      <label class="etiqueta">Teléfono
+        <input v-model.trim="nuevoDueno.telefono" class="campo" type="tel" required />
+      </label>
+      <button class="btn min-h-11">Crear superadministrador</button>
+    </form>
+    <ul v-else class="grid gap-3">
       <li v-for="a in admins" :key="a.id" class="grid gap-2 rounded-xl bg-brand-50 p-3" :class="{ 'opacity-60': !a.activo }">
         <div>
           <b class="text-brand-900">{{ a.nombre }}</b>
-          <p class="text-sm text-brand-700">@{{ a.usuario }}<template v-if="!a.activo"> · inactivo</template></p>
+          <p class="text-sm text-brand-700">Usuario: <b class="font-mono">{{ a.usuario }}</b><template v-if="!a.activo"> · inactivo</template></p>
+          <p v-if="a.claveTemporal" class="text-sm text-brand-700">Clave temporal: <b class="font-mono">{{ a.claveTemporal }}</b></p>
+          <p v-else class="text-sm text-brand-700">Ya cambió su clave (se guarda cifrada y no se puede ver).</p>
           <p v-if="a.correo" class="text-xs break-all text-brand-700/70">{{ a.correo }}</p>
         </div>
-        <template v-if="a.cedula">
-          <p class="text-xs text-brand-800">La clave volverá a ser su número de cédula (<b class="font-mono">{{ a.cedula }}</b>). Deberá cambiarla al ingresar y se cerrarán sus sesiones abiertas.</p>
-          <button class="btn min-h-11" @click="restablecerAdmin(a)"><KeyRound :size="18" aria-hidden="true" />Restablecer a la cédula</button>
-        </template>
-        <form v-else class="grid gap-2" @submit.prevent="restablecerAdmin(a)">
-          <label class="etiqueta">No tiene cédula: escribe una clave temporal (mínimo 10 caracteres, con letras y números)
-            <CampoClave v-model="clavesManuales[a.id]" autocomplete="new-password" required minlength="10" />
-          </label>
-          <button class="btn min-h-11"><KeyRound :size="18" aria-hidden="true" />Restablecer clave</button>
-        </form>
+        <button v-if="!a.claveTemporal" class="btn min-h-11" @click="restablecerAdmin(a)"><KeyRound :size="18" aria-hidden="true" />Restablecer clave</button>
       </li>
     </ul>
     <p v-if="errorAdmins" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ errorAdmins }}</p>
   </Modal>
-  <Modal v-if="claveRestablecida" titulo="Clave restablecida" @cerrar="claveRestablecida = null">
-    <CredencialesNuevas accion="Clave restablecida" v-bind="claveRestablecida" @listo="claveRestablecida = null" />
+  <Modal v-if="claveEntregar" :titulo="claveEntregar.accion" @cerrar="claveEntregar = null">
+    <CredencialesNuevas v-bind="claveEntregar" de-root @listo="claveEntregar = null" />
   </Modal>
 
   <p v-if="cargando && !empresas.length" class="py-10 text-center text-brand-700">Cargando…</p>
   <p v-else-if="!empresas.length" class="py-10 text-center text-brand-700/70">Todavía no hay empresas.</p>
   <p v-else-if="!filtradas.length" class="py-10 text-center text-brand-700/70">No hay empresas que coincidan.</p>
 
-  <ul class="grid gap-2.5">
+  <ul class="grid gap-2.5 lg:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
     <li v-for="e in pag.visibles.value" :key="e.id" class="tarjeta grid gap-3 border-l-4" :class="e.activa ? 'border-l-emerald-500' : 'border-l-red-400 opacity-80'">
       <div class="flex items-start gap-3">
         <Avatar :icono="Building2" :inactivo="!e.activa" />
@@ -290,9 +268,7 @@ async function alternar(e) {
         <Dato v-if="e.datos?.correo" :icono="Mail" etiqueta="Correo" ajustar>{{ e.datos.correo }}</Dato>
       </div>
       <div class="flex flex-wrap gap-2">
-        <button class="btn min-h-10 flex-none text-sm" @click="configurando = e"><Settings :size="16" aria-hidden="true" />Configurar</button>
-        <button class="btn-borde min-h-10 text-sm" @click="abrir(e)"><Pencil :size="16" aria-hidden="true" />Datos</button>
-        <button class="btn-borde min-h-10 text-sm" @click="abrirAdmins(e)"><KeyRound :size="16" aria-hidden="true" />Clave del administrador</button>
+        <button class="btn-borde min-h-10 text-sm" @click="abrirAdmins(e)"><KeyRound :size="16" aria-hidden="true" />Superadministrador</button>
         <button class="min-h-10 flex-1 rounded-xl border px-4 text-sm font-semibold sm:flex-none" :class="e.activa ? 'border-red-600 text-red-700' : 'border-emerald-600 text-emerald-700'" @click="alternar(e)">
           <Power :size="16" class="mr-1.5 inline" aria-hidden="true" />{{ e.activa ? 'Desactivar' : 'Activar' }}
         </button>

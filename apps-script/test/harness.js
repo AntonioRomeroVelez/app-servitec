@@ -12,6 +12,9 @@ const CODIGO = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.
 const aSigned = (buf) => Array.from(buf).map((b) => (b > 127 ? b - 256 : b))
 const aBuffer = (bytes) => Buffer.from(bytes.map((b) => b & 0xff))
 
+// Como Sheets: un apóstrofo inicial solo indica "es texto" y no forma parte del valor
+const comoSheets = (v) => (typeof v === 'string' && v.startsWith("'") ? v.slice(1) : v)
+
 class Hoja {
   constructor(nombre, stats) {
     this.nombre = nombre
@@ -26,10 +29,13 @@ class Hoja {
     return this.filas.reduce((m, f) => Math.max(m, f.length), 0)
   }
   getMaxRows() {
-    return Math.max(1000, this.filas.length)
+    return Math.max(1000, this.filas.length, this.maximo || 0)
+  }
+  insertRowsAfter(_desde, cantidad) {
+    this.maximo = this.getMaxRows() + cantidad
   }
   appendRow(r) {
-    this.filas.push([...r])
+    this.filas.push(r.map(comoSheets))
     this.stats.escrituras++
   }
   setFrozenRows() {}
@@ -43,6 +49,8 @@ class Hoja {
   }
   getRange(r, c, nr = 1, nc = 1) {
     const h = this
+    // Como Sheets: no se puede salir de las filas que tiene la hoja
+    if (r + nr - 1 > h.getMaxRows()) throw new Error(`Rango fuera de la hoja ${h.nombre}`)
     return {
       getValues() {
         h.stats.lecturas++
@@ -61,7 +69,7 @@ class Hoja {
         v.forEach((fila, i) => {
           const idx = r - 1 + i
           h.filas[idx] = h.filas[idx] || []
-          fila.forEach((x, j) => (h.filas[idx][c - 1 + j] = x))
+          fila.forEach((x, j) => (h.filas[idx][c - 1 + j] = comoSheets(x)))
         })
       },
       setValue(v) {
@@ -93,7 +101,8 @@ function crearDrive() {
       archivos: [],
       papelera: false,
       getId: () => id,
-      getName: () => nombre,
+      getName: () => c.nombre,
+      setName: (x) => (c.nombre = x),
       isTrashed: () => c.papelera,
       getFolders: () => iter(c.hijos),
       getFoldersByName: (x) => iter(c.hijos.filter((h) => h.nombre === x)),
@@ -110,21 +119,43 @@ function crearDrive() {
     ;(padre ? padre.hijos : raices).push(c)
     return c
   }
+  const hojasDeCalculo = new Map() // id -> archivo de Drive de cada hoja de cálculo creada
   return {
     raices,
     archivos,
+    hojasDeCalculo,
     DriveApp: {
       createFolder: (x) => nuevaCarpeta(x, null),
       getFoldersByName: (x) => iter(raices.filter((c) => c.nombre === x)),
       getFolderById: (id) => carpetas.get(id) || (() => { throw new Error('Carpeta no existe') })(),
-      getFileById: (id) => archivos.get(id) || (() => { throw new Error('Archivo no existe') })(),
+      getFileById: (id) => hojasDeCalculo.get(id) || archivos.get(id) || (() => { throw new Error('Archivo no existe') })(),
     },
   }
 }
 
 export function crearEntorno() {
   const stats = { lecturas: 0, celdasLeidas: 0, caracteres: 0, escrituras: 0, bloqueos: 0 }
-  const hojas = new Map()
+  const libros = new Map() // id -> hoja de cálculo; 'principal' es la que tiene el script
+  function nuevoLibro(id, nombre, conPestana) {
+    const hojas = new Map()
+    const libro = {
+      nombre,
+      hojas,
+      getId: () => id,
+      setSpreadsheetTimeZone: (tz) => (zona.tz = tz),
+      getSheetByName: (n) => hojas.get(n) || null,
+      getSheets: () => [...hojas.values()],
+      deleteSheet: (h) => hojas.delete(h.nombre),
+      insertSheet: (n) => {
+        const h = new Hoja(n, stats)
+        hojas.set(n, h)
+        return h
+      },
+    }
+    libros.set(id, libro)
+    if (conPestana) libro.insertSheet('Hoja 1')
+    return libro
+  }
   const props = new Map()
   const cacheMapa = new Map()
   let reloj = 0 // segundos simulados, para expirar el caché y los bloqueos
@@ -145,19 +176,28 @@ export function crearEntorno() {
       .replace('yyyy', String(d.getFullYear()))
   }
 
+  const principal = nuevoLibro('principal', 'Principal', false)
+  const GLOBALES = ['Usuarios', 'Empresas']
+  /** Hoja de la empresa indicada (por id) o de la primera; Usuarios y Empresas están en la principal. */
+  function hojaDe(nombre, empresaId) {
+    const empresas = principal.getSheetByName('Empresas')?.filas.slice(1) || []
+    const fila = empresaId ? empresas.find((f) => f[0] === empresaId) : empresas[0]
+    const libro = GLOBALES.includes(nombre) || !fila ? principal : libros.get(fila[8])
+    return libro.getSheetByName(nombre)
+  }
+
   const ctx = {
     console,
     Logger: { log: (m) => logs.push(String(m)) },
     SpreadsheetApp: {
-      getActiveSpreadsheet: () => ({
-        setSpreadsheetTimeZone: (tz) => (zona.tz = tz),
-        getSheetByName: (n) => hojas.get(n) || null,
-        insertSheet: (n) => {
-          const h = new Hoja(n, stats)
-          hojas.set(n, h)
-          return h
-        },
-      }),
+      getActiveSpreadsheet: () => principal,
+      openById: (id) => libros.get(id) || (() => { throw new Error('La hoja de cálculo no existe') })(),
+      create: (nombre) => {
+        const libro = nuevoLibro(`S${libros.size}`, nombre, true)
+        const archivo = { nombre, carpeta: null, moveTo: (c) => (archivo.carpeta = c), setName: (x) => (archivo.nombre = x) }
+        drive.hojasDeCalculo.set(libro.getId(), archivo)
+        return libro
+      },
     },
     Utilities: {
       getUuid: () => crypto.randomUUID(),
@@ -219,7 +259,7 @@ export function crearEntorno() {
     },
   }
   vm.createContext(ctx)
-  vm.runInContext(`${CODIGO}\n;globalThis.__gs = { doPost, doGet, enviarRecordatorios, limpiarNotificaciones, instalarTriggers, crearSuperadmin, diagnosticoUsuarios, registrarClientesExistentes, aplicarFormatos, tablas: { VISITAS, INFORMES, FOTOS, USUARIOS, NOTIFICACIONES, CLIENTES, BITACORA } }`, ctx)
+  vm.runInContext(`${CODIGO}\n;globalThis.__gs = { doPost, doGet, enviarRecordatorios, limpiarNotificaciones, instalarTriggers, crearSuperadmin, diagnosticoUsuarios, registrarClientesExistentes, aplicarFormatos, tablas: { VISITAS, INFORMES, FOTOS, USUARIOS, NOTIFICACIONES, CLIENTES, BITACORA, EMPRESAS } }`, ctx)
 
   /** Llama al backend como lo haría el frontend. Devuelve { ok, data|error, code } ya parseado. */
   function llamar(action, payload = {}, token) {
@@ -244,7 +284,9 @@ export function crearEntorno() {
     stats,
     drive,
     tablas: ctx.__gs.tablas,
-    hoja: (nombre) => hojas.get(nombre),
+    hoja: hojaDe,
+    principal, // la hoja de cálculo que tiene el script
+    libros,
     /** Avanza el reloj simulado (expira bloqueos y sesiones del caché) */
     avanzar: (seg) => (reloj += seg),
     reiniciarStats: () => Object.keys(stats).forEach((k) => (stats[k] = 0)),

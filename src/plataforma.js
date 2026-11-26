@@ -27,15 +27,17 @@ export function detectarPlataforma(ua = '', { standalone = false, tactil = false
 
 /**
  * Enlace que lleva el QR: la dirección de la app con ?instalar=1, que abre una pantalla de instalación antes del ingreso.
+ * Con `empresa` agrega &empresa=<id>, para que el ingreso muestre su logo y colores.
  * Devuelve '' si la dirección no es válida (debe ser http:// o https:// completa).
  */
-export function enlaceInstalacion(direccion) {
+export function enlaceInstalacion(direccion, empresa = '') {
   try {
     const u = new URL(String(direccion || '').trim())
     if (u.protocol !== 'https:' && u.protocol !== 'http:') return ''
     u.search = ''
     u.hash = ''
     u.searchParams.set('instalar', '1')
+    if (empresa) u.searchParams.set('empresa', empresa)
     return u.toString()
   } catch {
     return ''

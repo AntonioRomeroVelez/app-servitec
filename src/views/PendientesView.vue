@@ -49,7 +49,7 @@ async function descartar(op) {
     <p>No hay cambios pendientes. Todo está enviado.</p>
   </div>
 
-  <ul class="grid gap-2.5">
+  <ul class="grid gap-2.5 lg:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
     <li v-for="op in ops" :key="op.n" class="tarjeta grid gap-2 border-l-4" :class="op.estado === 'fallida' ? 'border-l-red-400' : 'border-l-brand-300'">
       <div class="flex items-start gap-3">
         <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full" :class="op.estado === 'fallida' ? 'bg-red-100 text-red-700' : 'bg-brand-100 text-brand-700'">

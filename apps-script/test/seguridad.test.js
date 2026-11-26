@@ -1,15 +1,12 @@
+import { conEmpresa, datosUsuario, cedulaDe } from './ayudas.js'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { crearEntorno, CLAVE_INICIAL } from './harness.js'
 
 const nuevaClave = 'Ferisel-Nueva-2026'
 
-// Deja un superadmin listo para operar (clave inicial cambiada)
-function superadminListo(env) {
-  const { token } = env.ok('login', { usuario: 'superadmin', clave: CLAVE_INICIAL })
-  const r = env.ok('cambiar_clave', { actual: CLAVE_INICIAL, nueva: nuevaClave }, token)
-  return r.token
-}
+// Deja listo para operar al superadministrador de una empresa
+const superadminListo = (env) => conEmpresa(env).sa
 
 test('el superadmin inicial debe cambiar su clave antes de usar el sistema', () => {
   const env = crearEntorno()
@@ -93,27 +90,30 @@ test('usuarios nuevos: política de clave, cambio obligatorio y primer uso', () 
   const env = crearEntorno()
   const sa = superadminListo(env)
 
-  assert.match(env.llamar('usuarios_create', { data: { usuario: 'ana', nombre: 'Ana', rol: 'tecnico', clave: 'corta1' } }, sa).error, /al menos 10/)
-  assert.match(env.llamar('usuarios_create', { data: { usuario: 'ana', nombre: 'Ana', rol: 'tecnico', clave: 'ana-clave-12345' } }, sa).error, /nombre de usuario/)
-  assert.match(env.llamar('usuarios_create', { data: { usuario: 'A n', nombre: 'Ana', rol: 'tecnico', clave: 'Temporal-2026' } }, sa).error, /Usuario inválido/)
+  assert.match(env.llamar('usuarios_create', { data: datosUsuario('A n', 'tecnico', 10) }, sa).error, /Usuario inválido/)
+  assert.match(env.llamar('usuarios_create', { data: datosUsuario('ana', 'tecnico', 10, { cedula: '123' }) }, sa).error, /10 dígitos/)
 
-  const u = env.ok('usuarios_create', { data: { usuario: 'ana', nombre: 'Ana', rol: 'tecnico', clave: 'Temporal-2026' } }, sa)
+  const datos = datosUsuario('ana', 'tecnico', 10)
+  const u = env.ok('usuarios_create', { data: datos }, sa)
   assert.equal(u.cambiarClave, true)
   assert.equal(u.hash, undefined) // la respuesta nunca expone hash ni sal
   assert.equal(u.salt, undefined)
 
-  const login = env.ok('login', { usuario: 'ana', clave: 'Temporal-2026' })
+  const login = env.ok('login', { usuario: 'ana', clave: datos.cedula })
   assert.equal(env.llamar('visitas_list', {}, login.token).code, 'CAMBIAR_CLAVE')
-  const cambio = env.ok('cambiar_clave', { actual: 'Temporal-2026', nueva: 'Mi-Clave-Propia-1' }, login.token)
+  assert.match(env.llamar('cambiar_clave', { actual: datos.cedula, nueva: 'corta1' }, login.token).error, /al menos 10/)
+  assert.match(env.llamar('cambiar_clave', { actual: datos.cedula, nueva: 'ana-clave-12345' }, login.token).error, /nombre de usuario/)
+  const cambio = env.ok('cambiar_clave', { actual: datos.cedula, nueva: 'Mi-Clave-Propia-1' }, login.token)
   assert.ok(Array.isArray(env.ok('visitas_list', {}, cambio.token).items))
 })
 
 test('restablecer clave (superadmin): cierra sesiones, exige cambio y levanta el bloqueo', () => {
   const env = crearEntorno()
   const sa = superadminListo(env)
-  const u = env.ok('usuarios_create', { data: { usuario: 'luis', nombre: 'Luis', rol: 'admin', clave: 'Temporal-2026' } }, sa)
-  const sesion = env.ok('login', { usuario: 'luis', clave: 'Temporal-2026' })
-  const activo = env.ok('cambiar_clave', { actual: 'Temporal-2026', nueva: 'Clave-Segura-7755' }, sesion.token)
+  const datos = datosUsuario('luis', 'admin', 11)
+  const u = env.ok('usuarios_create', { data: datos }, sa)
+  const sesion = env.ok('login', { usuario: 'luis', clave: datos.cedula })
+  const activo = env.ok('cambiar_clave', { actual: datos.cedula, nueva: 'Clave-Segura-7755' }, sesion.token)
 
   for (let i = 0; i < 5; i++) env.llamar('login', { usuario: 'luis', clave: 'mala' }) // se bloquea
   assert.equal(env.llamar('login', { usuario: 'luis', clave: 'Clave-Segura-7755' }).code, 'LOCKED')
@@ -147,11 +147,12 @@ test('las claves nunca quedan en texto plano en la hoja y el hash es v2', () => 
 test('usuario desactivado pierde el acceso aunque tenga token', () => {
   const env = crearEntorno()
   const sa = superadminListo(env)
-  const u = env.ok('usuarios_create', { data: { usuario: 'pedro', nombre: 'Pedro', rol: 'admin', clave: 'Temporal-2026' } }, sa)
-  const { token } = env.ok('login', { usuario: 'pedro', clave: 'Temporal-2026' })
+  const datos = datosUsuario('pedro', 'admin', 12)
+  const u = env.ok('usuarios_create', { data: datos }, sa)
+  const { token } = env.ok('login', { usuario: 'pedro', clave: datos.cedula })
   env.ok('usuarios_update', { id: u.id, data: { activo: false } }, sa)
   assert.equal(env.llamar('me', {}, token).code, 'AUTH')
-  assert.equal(env.llamar('login', { usuario: 'pedro', clave: 'Temporal-2026' }).ok, false)
+  assert.equal(env.llamar('login', { usuario: 'pedro', clave: datos.cedula }).ok, false)
 })
 
 test('login y consultas no toman el lock; las escrituras sí (y sin tomarlo dos veces)', () => {
@@ -171,6 +172,7 @@ const definirSuperadmin = (env, clave = 'temporal1') => {
   env.propiedades.set('SUPERADMIN_USUARIO', 'jefe.demo')
   env.propiedades.set('SUPERADMIN_NOMBRE', 'Jefe Demo')
   env.propiedades.set('SUPERADMIN_CLAVE', clave)
+  env.propiedades.set('SUPERADMIN_CEDULA', cedulaDe(999999))
 }
 
 test('crearSuperadmin (desde el editor): crea el usuario con la clave temporal de las propiedades y evita el superadmin genérico', () => {
@@ -180,13 +182,13 @@ test('crearSuperadmin (desde el editor): crea el usuario con la clave temporal d
 
   // la clave temporal sirve para entrar, pero exige cambiarla antes de hacer nada
   const login = env.ok('login', { usuario: 'jefe.demo', clave: 'temporal1' })
-  assert.equal(login.usuario.rol, 'superadmin')
+  assert.equal(login.usuario.rol, 'root')
   assert.equal(login.usuario.nombre, 'Jefe Demo')
   assert.equal(login.usuario.cambiarClave, true)
-  assert.equal(env.llamar('usuarios_list', {}, login.token).code, 'CAMBIAR_CLAVE')
+  assert.equal(env.llamar('empresas_list', {}, login.token).code, 'CAMBIAR_CLAVE')
   assert.match(env.llamar('cambiar_clave', { actual: 'temporal1', nueva: 'corta1' }, login.token).error, /al menos 10/) // la política sí rige al cambiarla
   const cambio = env.ok('cambiar_clave', { actual: 'temporal1', nueva: 'Clave-Nueva-Segura-1' }, login.token)
-  assert.equal(env.ok('usuarios_list', {}, cambio.token).length, 1)
+  assert.deepEqual(env.ok('empresas_list', {}, cambio.token), [])
 
   // la hoja no estaba vacía: no se creó el superadmin genérico con la clave pública
   assert.equal(env.llamar('login', { usuario: 'superadmin', clave: CLAVE_INICIAL }).ok, false)

@@ -34,8 +34,11 @@ export function useAuth() {
   const usuario = computed(() => sesion.value?.usuario ?? null)
   const esSuper = computed(() => usuario.value?.rol === 'superadmin')
   const esPlataforma = computed(() => !!usuario.value?.plataforma)
-  const puedeUsuarios = computed(() => usuario.value?.rol === 'admin' || usuario.value?.rol === 'superadmin') // el admin gestiona solo técnicos
-  const puedeAgendar = computed(() => usuario.value?.rol === 'admin' || usuario.value?.rol === 'superadmin')
+  const esRoot = computed(() => usuario.value?.rol === 'root') // dueño del sistema: solo administra empresas
+  const puedeUsuarios = computed(() => usuario.value?.rol === 'admin' || usuario.value?.rol === 'superadmin') // el admin gestiona administradores y técnicos; el superadmin, administradores
+  const puedeAgendar = computed(() => usuario.value?.rol === 'admin') // el trabajo diario es de los administradores
+  // El root y el superadministrador no trabajan con visitas ni informes
+  const sinOperacion = computed(() => ['root', 'superadmin'].includes(usuario.value?.rol))
 
   async function login(user, clave) {
     guardar(await call('login', { usuario: user.trim(), clave }))
@@ -52,5 +55,5 @@ export function useAuth() {
     cerrar()
   }
 
-  return { usuario: readonly(usuario), esSuper, esPlataforma, puedeUsuarios, puedeAgendar, logueado: computed(() => !!sesion.value), login, cambiarMiClave, logout }
+  return { usuario: readonly(usuario), esSuper, esPlataforma, esRoot, sinOperacion, puedeUsuarios, puedeAgendar, logueado: computed(() => !!sesion.value), login, cambiarMiClave, logout }
 }

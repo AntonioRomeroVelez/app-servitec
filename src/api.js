@@ -146,18 +146,17 @@ function usuariosDemo() {
 }
 
 // Visibilidad por rol (mismas reglas que puedeVer_ en Code.gs)
-function puedeVer(recurso, item, yo, idsVisitasPropias) {
-  if (yo.rol === 'superadmin') return true
-  if (recurso === 'visitas') return yo.rol === 'tecnico' ? item.responsable === yo.usuario : item.autor === yo.usuario
-  if (item.autor === yo.usuario) return true
-  return yo.rol === 'admin' && !!item.visitaId && idsVisitasPropias.includes(item.visitaId)
+const esGestor = (u) => u.rol === 'superadmin' || u.rol === 'admin'
+function puedeVer(recurso, item, yo) {
+  if (esGestor(yo)) return true
+  return recurso === 'visitas' ? item.responsable === yo.usuario : item.autor === yo.usuario
 }
 
 const ESTADOS_VISITA = ['Programada', 'Aceptada', 'En curso', 'Realizada', 'Cancelada']
 const TRANSICIONES_TECNICO = { Programada: ['Aceptada', 'Cancelada'], Aceptada: ['En curso', 'Cancelada'], 'En curso': ['Realizada', 'Cancelada'] }
 const ESTADOS_CON_INFORME = ['Aceptada', 'En curso', 'Realizada']
 
-const checklistCompleta = (texto) => !texto || JSON.parse(texto).every((i) => i.resultado && (i.resultado !== 'falla' || String(i.obs || '').trim()))
+const checklistCompleta = (texto) => !texto || JSON.parse(texto).every((i) => String(i.item || '').trim() && i.resultado)
 
 function siguienteNumero(informes) {
   const prefijo = `${configDemo().informes.prefijo}-${new Date().getFullYear()}-`
@@ -311,9 +310,8 @@ async function demo(action, p, token) {
     const h = hoyIso()
     const mesIni = `${h.slice(0, 7)}-01`
     const visitas = leer(RECURSOS.visitas, [])
-    const propias = yo.rol === 'admin' ? visitas.filter((v) => v.autor === yo.usuario).map((v) => v.id) : []
-    const vv = visitas.filter((v) => puedeVer('visitas', v, yo, propias))
-    const ii = leer(RECURSOS.informes, []).filter((i) => puedeVer('informes', i, yo, propias))
+    const vv = visitas.filter((v) => puedeVer('visitas', v, yo))
+    const ii = leer(RECURSOS.informes, []).filter((i) => puedeVer('informes', i, yo))
     const n = (lista, f) => lista.filter(f).length
     const desde = haceDias(6)
     const hasta = haceDias(-7)
@@ -369,7 +367,6 @@ async function demo(action, p, token) {
       escribir(LS_C, cs)
       return publicoC(cs[i])
     }
-    if (!esSuper) throw error('Sin permisos', 'FORBIDDEN')
     if (leer(RECURSOS.visitas, []).some((v) => v.clienteId === cs[i].id)) throw error('El cliente tiene visitas registradas y no se puede eliminar')
     escribir(LS_C, cs.filter((c) => c.id !== p.id))
     return true
@@ -382,8 +379,7 @@ async function demo(action, p, token) {
     const key = RECURSOS[nombre]
     const lista = leer(key, [])
     const visitas = leer(RECURSOS.visitas, [])
-    const propias = yo.rol === 'admin' ? visitas.filter((v) => v.autor === yo.usuario).map((v) => v.id) : []
-    const ver = (i) => puedeVer(nombre, i, yo, propias)
+    const ver = (i) => puedeVer(nombre, i, yo)
 
     if (op === 'list') return listarDemo(nombre, p, lista, ver)
     if (nombre === 'visitas' && yo.rol === 'tecnico' && op !== 'update' && op !== 'get') throw error('Sin permisos', 'FORBIDDEN')
@@ -392,12 +388,12 @@ async function demo(action, p, token) {
       if (nombre === 'visitas') validarResponsable(p.data.responsable, us)
       if (nombre === 'informes' && p.data.visitaId) {
         const v = visitas.find((x) => x.id === p.data.visitaId)
-        if (!v || !puedeVer('visitas', v, yo, [])) throw error('Visita no encontrada')
+        if (!v || !puedeVer('visitas', v, yo)) throw error('Visita no encontrada')
         if (yo.rol === 'tecnico' && !ESTADOS_CON_INFORME.includes(v.estado)) throw error('Acepta la visita antes de crear su informe')
       }
       const item = { ...p.data, id: p.data.id || crypto.randomUUID(), autor: yo.usuario, creado: ahora, actualizado: ahora }
       if (nombre === 'informes') {
-        if (item.estado === 'Finalizado' && !checklistCompleta(item.checklist)) throw error('Completa el checklist (y observaciones de las fallas) para finalizar')
+        if (item.estado === 'Finalizado' && !checklistCompleta(item.checklist)) throw error('Para finalizar, cada actividad necesita su descripción y su resultado')
         item.numero = siguienteNumero(lista)
       }
       if (nombre === 'visitas') item.clienteId = asegurarClienteDemo(item, yo.usuario) // el cliente queda registrado
@@ -429,14 +425,14 @@ async function demo(action, p, token) {
       if (nombre === 'informes') {
         delete d.visitaId
         delete d.numero
-        if (lista[i].estado === 'Finalizado' && !esSuper) throw error('Informe finalizado: solo el superadmin puede modificarlo', 'FORBIDDEN')
+        if (lista[i].estado === 'Finalizado' && !esGestor(yo)) throw error('Informe finalizado: solo un administrador puede modificarlo', 'FORBIDDEN')
       }
       const previo = lista[i]
       lista[i] = { ...previo, ...d, id: p.id, autor: previo.autor, creado: previo.creado, modificadoPor: yo.usuario, actualizado: ahora }
       if (nombre === 'visitas' && yo.rol !== 'tecnico' && (!lista[i].clienteId || normalizar(lista[i].cliente) !== normalizar(previo.cliente))) {
         lista[i].clienteId = asegurarClienteDemo(lista[i], yo.usuario)
       }
-      if (nombre === 'informes' && lista[i].estado === 'Finalizado' && !checklistCompleta(lista[i].checklist)) throw error('Completa el checklist (y observaciones de las fallas) para finalizar')
+      if (nombre === 'informes' && lista[i].estado === 'Finalizado' && !checklistCompleta(lista[i].checklist)) throw error('Para finalizar, cada actividad necesita su descripción y su resultado')
       escribir(key, lista)
       if (nombre === 'visitas' && previo.estado !== lista[i].estado && yo.rol === 'tecnico') {
         const rechazo = lista[i].estado === 'Cancelada' && previo.estado === 'Programada'
@@ -449,7 +445,7 @@ async function demo(action, p, token) {
       return lista[i]
     }
 
-    if (nombre === 'informes' && !esSuper && (lista[i].autor !== yo.usuario || lista[i].estado === 'Finalizado')) throw error('Sin permisos', 'FORBIDDEN')
+    if (nombre === 'informes' && !esGestor(yo) && (lista[i].autor !== yo.usuario || lista[i].estado === 'Finalizado')) throw error('Sin permisos', 'FORBIDDEN')
     escribir(key, lista.filter((x) => x.id !== p.id))
     if (nombre === 'visitas') escribir(LS_F, leer(LS_F, []).filter((f) => f.visitaId !== p.id))
     return true
@@ -461,7 +457,7 @@ async function demo(action, p, token) {
     const fotos = leer(LS_F, [])
     const visitaAccesible = (id) => {
       const v = leer(RECURSOS.visitas, []).find((x) => x.id === id)
-      if (!v || !puedeVer('visitas', v, yo, [])) throw error('Visita no encontrada')
+      if (!v || !puedeVer('visitas', v, yo)) throw error('Visita no encontrada')
       return v
     }
     const sinImagen = ({ imagen, ...f }) => f
@@ -486,19 +482,20 @@ async function demo(action, p, token) {
         if (!f) throw error('Foto no encontrada')
         visitaAccesible(f.visitaId)
         if (mf[1] === 'get') return { dataUrl: f.imagen }
-        if (!esSuper && f.autor !== yo.usuario) throw error('Sin permisos', 'FORBIDDEN')
+        if (!esGestor(yo) && f.autor !== yo.usuario) throw error('Sin permisos', 'FORBIDDEN')
         escribir(LS_F, fotos.filter((x) => x.id !== p.id))
         return true
       }
     }
   }
 
-  // Usuarios: el admin solo gestiona técnicos; el resto de esta zona es del superadmin
+  // Usuarios: el admin gestiona administradores y técnicos (nunca superadmins); el resto de esta zona es del superadmin
   if (yo.rol === 'admin' && action.startsWith('usuarios_')) {
-    if (action === 'usuarios_create' && p.data?.rol !== 'tecnico') throw error('Solo puedes crear técnicos', 'FORBIDDEN')
-    if (action === 'usuarios_update') {
+    const permitido = (rol) => rol === 'tecnico' || rol === 'admin'
+    if (action === 'usuarios_create' && !permitido(p.data?.rol)) throw error('Solo puedes crear administradores y técnicos', 'FORBIDDEN')
+    if (action === 'usuarios_update' || action === 'usuarios_delete') {
       const objetivo = us.find((x) => x.id === p.id)
-      if (!objetivo || objetivo.rol !== 'tecnico' || (p.data?.rol && p.data.rol !== 'tecnico')) throw error('Sin permisos', 'FORBIDDEN')
+      if (!objetivo || !permitido(objetivo.rol) || (p.data?.rol && !permitido(p.data.rol))) throw error('Sin permisos', 'FORBIDDEN')
     }
   } else if (!esSuper) throw error('Sin permisos', 'FORBIDDEN')
   switch (action) {
@@ -512,14 +509,26 @@ async function demo(action, p, token) {
     case 'usuarios_disponible':
       return usuarioValido(String(p.usuario || '').toLowerCase()) && !us.some((x) => x.usuario === String(p.usuario).toLowerCase())
     case 'usuarios_list':
-      return us.map(publico)
+      return us.filter((x) => !x.eliminado && (esSuper || x.rol !== 'superadmin')).map(publico)
+    case 'usuarios_delete': {
+      const objetivo = us.find((x) => x.id === p.id && !x.eliminado)
+      if (!objetivo) throw error('No encontrado')
+      if (objetivo.id === yo.id) throw error('No puedes eliminar tu propia cuenta')
+      const pendientes = leer(RECURSOS.visitas, []).filter((v) => v.responsable === objetivo.usuario && ['Programada', 'Aceptada', 'En curso'].includes(v.estado)).length
+      if (pendientes) throw error(`${objetivo.nombre} tiene ${pendientes} visita(s) pendiente(s): asígnalas a otra persona antes de eliminar`)
+      // se marca, no se borra: su nombre de usuario no se reutiliza
+      escribir(LS_U, us.map((x) => (x.id === p.id ? { ...x, activo: false, eliminado: true, cedula: '' } : x)))
+      return true
+    }
     case 'usuarios_create': {
       const d = p.data
       if (!['superadmin', 'admin', 'tecnico'].includes(d.rol)) throw error('Elige el rol del usuario')
       const msg = validarPersona(d)
       if (msg) throw error(msg)
       const datos = limpiarPersona(d)
-      if (us.some((x) => x.cedula && x.cedula === datos.cedula)) throw error('Ya existe un usuario con esa cédula')
+      // El dueño de la empresa (superadmin) puede tener además una cuenta de administrador con sus mismos datos
+      const duenoYAdmin = (x) => (x.rol === 'superadmin' && d.rol === 'admin') || (x.rol === 'admin' && d.rol === 'superadmin')
+      if (us.some((x) => x.cedula && x.cedula === datos.cedula && !duenoYAdmin(x))) throw error('Ya existe un usuario con esa cédula')
       const usuario = datos.usuario || generarUsuario(datos.nombre, datos.cedula, us.map((x) => x.usuario))
       if (!usuarioValido(usuario)) throw error('Usuario inválido: de 3 a 30 caracteres (letras minúsculas, números, punto, guion o guion bajo)')
       if (us.some((x) => x.usuario === usuario)) throw error('Ese usuario ya está en uso')
@@ -533,7 +542,7 @@ async function demo(action, p, token) {
       const { clave, temporal, ...resto } = p.data
       const rol = resto.rol ?? us[i].rol
       const activo = resto.activo ?? us[i].activo
-      if (p.id === yo.id && (!activo || rol !== 'superadmin')) throw error('No puedes quitarte tu propio acceso')
+      if (p.id === yo.id && (!activo || rol !== yo.rol)) throw error('No puedes quitarte tu propio acceso')
       if (clave) {
         const msgClave = temporal ? '' : validarClave(clave, us[i].usuario)
         if (msgClave) throw error(msgClave)

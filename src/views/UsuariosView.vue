@@ -1,6 +1,6 @@
 <script setup>
 import { reactive, ref, computed, watch, onMounted } from 'vue'
-import { Plus, KeyRound, Pencil, Phone, MapPin, Mail, IdCard, Briefcase } from 'lucide-vue-next'
+import { Plus, KeyRound, Pencil, Trash2, Phone, MapPin, Mail, IdCard, Briefcase } from 'lucide-vue-next'
 import { useUsuarios } from '../composables/useUsuarios'
 import { useAuth, ROLES } from '../composables/useAuth'
 import { confirmar } from '../composables/useConfirmar'
@@ -18,8 +18,12 @@ import Avatar from '../components/Avatar.vue'
 import Dato from '../components/Dato.vue'
 import { ETIQUETA_ROL, CLASE_ROL } from '../estados'
 
-const { usuarios, cargando, error, cargar, crear, actualizar } = useUsuarios()
-const { usuario: yo, esSuper } = useAuth() // el admin solo ve y gestiona técnicos; el superadmin, a todos
+const { usuarios, cargando, error, cargar, crear, actualizar, eliminar } = useUsuarios()
+const { usuario: yo, esSuper } = useAuth()
+// El superadmin gestiona a los administradores; el admin, a administradores y técnicos (no ve a los superadmins).
+// La cuenta del propietario solo la cambian él mismo y el superadmin.
+const rolesPermitidos = computed(() => ROLES.filter((r) => (esSuper.value ? r === 'admin' : r !== 'superadmin')))
+const puedeCambiar = (u) => u.id === yo.value.id || esSuper.value || !u.propietario
 
 const aviso = ref('')
 
@@ -33,7 +37,7 @@ const mostrarForm = ref(false)
 const credenciales = ref(null) // { nombre, usuario, clave } tras crear la cuenta (la clave temporal es la cédula)
 
 function abrirAlta() {
-  Object.assign(nuevo, personaVacia(), { rol: 'tecnico' })
+  Object.assign(nuevo, personaVacia(), { rol: rolesPermitidos.value[0] })
   aviso.value = ''
   credenciales.value = null
   mostrarForm.value = true
@@ -86,6 +90,12 @@ async function alternar(u) {
   actualizar(u.id, { activo: !u.activo }).catch(() => {})
 }
 
+async function borrar(u) {
+  if (!(await confirmar({ titulo: `¿Eliminar a ${u.nombre}?`, texto: 'No podrá ingresar y dejará de aparecer en la lista. Sus visitas e informes se conservan. Esta acción no se puede deshacer.', confirmar: 'Eliminar', peligro: true }))) return
+  aviso.value = ''
+  eliminar(u.id).catch(() => {})
+}
+
 // Restablecer clave: si el usuario tiene cédula vuelve a ser su cédula (clave temporal) con un toque; si no la tiene
 // (cuentas antiguas), se escribe una clave temporal dentro de la tarjeta.
 const restableciendoId = ref(null)
@@ -124,7 +134,7 @@ const filtrados = computed(() => {
   const t = normalizar(q.value)
   return usuarios.value.filter(
     (u) =>
-      (esSuper.value || u.rol === 'tecnico') &&
+      (rolesPermitidos.value.includes(u.rol) || u.id === yo.value.id) &&
       (!rol.value || u.rol === rol.value) &&
       (!estado.value || (estado.value === 'activos') === u.activo) &&
       (!t || [u.nombre, u.usuario, u.correo, u.cedula, u.ciudad, u.telefono].some((c) => normalizar(c).includes(t))),
@@ -139,9 +149,9 @@ onMounted(() => cargar().catch(() => {}))
 <template>
   <BarraFiltros v-model="q" placeholder="Buscar nombre, usuario, cédula o ciudad" :activos="(rol ? 1 : 0) + (estado ? 1 : 0)">
     <template #filtros>
-      <select v-if="esSuper" v-model="rol" class="campo !min-h-10 !py-1.5 text-sm" aria-label="Filtrar por rol">
+      <select v-model="rol" class="campo !min-h-10 !py-1.5 text-sm" aria-label="Filtrar por rol">
         <option value="">Todos los roles</option>
-        <option v-for="r in ROLES" :key="r" :value="r">{{ r }}</option>
+        <option v-for="r in rolesPermitidos" :key="r" :value="r">{{ r }}</option>
       </select>
       <select v-model="estado" class="campo !min-h-10 !py-1.5 text-sm" aria-label="Filtrar por estado">
         <option value="">Activos e inactivos</option>
@@ -163,7 +173,7 @@ onMounted(() => cargar().catch(() => {}))
   <Modal v-if="mostrarForm" :titulo="credenciales ? 'Usuario creado' : 'Nuevo usuario'" @cerrar="cerrarAlta">
     <CredencialesNuevas v-if="credenciales" v-bind="credenciales" @listo="cerrarAlta" />
     <form v-else class="grid gap-3" @submit.prevent="agregar">
-      <FormularioPersona :form="nuevo" :roles="esSuper ? ROLES : null" nueva-cuenta :usuarios-existentes="usuarios.map((u) => u.usuario)" :sugerir="sugerir" :disponible="disponible" />
+      <FormularioPersona :form="nuevo" :roles="rolesPermitidos" nueva-cuenta :usuarios-existentes="usuarios.map((u) => u.usuario)" :sugerir="sugerir" :disponible="disponible" />
       <p v-if="aviso || error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso || error }}</p>
       <button class="btn" :disabled="cargando">{{ cargando ? 'Creando…' : 'Crear usuario' }}</button>
     </form>
@@ -177,7 +187,7 @@ onMounted(() => cargar().catch(() => {}))
   <!-- Edición de datos (modal) -->
   <Modal v-if="editando" :titulo="`Datos de @${editando.usuario}`" @cerrar="editando = null">
     <form class="grid gap-3" @submit.prevent="guardarEdicion">
-      <FormularioPersona :form="edicion" :roles="esSuper && editando.id !== yo.id ? ROLES : null" editando />
+      <FormularioPersona :form="edicion" :roles="editando.id !== yo.id ? rolesPermitidos : null" editando />
       <p class="text-xs text-brand-700/80">El usuario de ingreso (@{{ editando.usuario }}) no cambia aunque se modifique el nombre.</p>
       <p v-if="aviso || error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso || error }}</p>
       <div class="flex gap-2">
@@ -187,7 +197,7 @@ onMounted(() => cargar().catch(() => {}))
     </form>
   </Modal>
 
-  <ul class="grid gap-2.5">
+  <ul class="grid gap-2.5 lg:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
     <li v-for="u in pag.visibles.value" :key="u.id" class="tarjeta grid gap-2" :class="{ 'opacity-60': !u.activo }">
       <div class="flex items-start gap-3">
         <Avatar :nombre="u.nombre" :inactivo="!u.activo" />
@@ -197,6 +207,7 @@ onMounted(() => cargar().catch(() => {}))
         </div>
         <span class="flex shrink-0 flex-col items-end gap-1">
           <span class="rounded-full px-2.5 py-0.5 text-xs font-semibold" :class="CLASE_ROL[u.rol] || 'bg-brand-100 text-brand-800'">{{ ETIQUETA_ROL[u.rol] || u.rol }}</span>
+          <span v-if="u.propietario" class="rounded-full bg-acento px-2.5 py-0.5 text-xs font-semibold text-acento-texto">Propietario</span>
           <span v-if="!u.activo" class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-800">Inactivo</span>
         </span>
       </div>
@@ -208,7 +219,7 @@ onMounted(() => cargar().catch(() => {}))
         <Dato v-if="u.correo" :icono="Mail" etiqueta="Correo" ajustar>{{ u.correo }}</Dato>
         <Dato v-if="u.direccion" :icono="MapPin" etiqueta="Dirección" ajustar>{{ u.direccion }}</Dato>
       </div>
-      <div class="flex flex-wrap gap-2">
+      <div v-if="puedeCambiar(u)" class="flex flex-wrap gap-2">
         <button class="btn-borde min-h-10 text-sm" @click="abrirEdicion(u)">
           <Pencil :size="16" aria-hidden="true" />
           Editar datos
@@ -219,6 +230,10 @@ onMounted(() => cargar().catch(() => {}))
         </button>
         <button v-if="u.id !== yo.id" class="min-h-10 flex-1 rounded-xl border text-sm font-semibold sm:flex-none sm:px-4" :class="u.activo ? 'border-red-600 text-red-700' : 'border-emerald-600 text-emerald-700'" @click="alternar(u)">
           {{ u.activo ? 'Desactivar' : 'Activar' }}
+        </button>
+        <button v-if="u.id !== yo.id" class="btn-peligro min-h-10 text-sm" @click="borrar(u)">
+          <Trash2 :size="16" aria-hidden="true" />
+          Eliminar
         </button>
       </div>
 

@@ -4,6 +4,7 @@ import { useAuth } from '../composables/useAuth'
 import { validarClave } from '../utils'
 import CampoClave from '../components/CampoClave.vue'
 import MarcaEmpresa from '../components/MarcaEmpresa.vue'
+import { useConfiguracion } from '../composables/useConfiguracion'
 
 // obligatorio = pantalla completa tras un login con clave temporal (no se puede omitir)
 const props = defineProps({ obligatorio: Boolean })
@@ -32,10 +33,11 @@ async function guardar() {
     cargando.value = false
   }
 }
+const { fondoIngreso } = useConfiguracion()
 </script>
 
 <template>
-  <div :class="obligatorio ? 'flex min-h-dvh flex-col bg-gradient-to-b from-brand-900 via-brand-700 to-brand-500 px-5 pt-[max(2rem,env(safe-area-inset-top))] pb-8' : ''">
+  <div :style="obligatorio ? fondoIngreso : null" :class="obligatorio ? 'flex min-h-dvh flex-col px-5 pt-[max(2rem,env(safe-area-inset-top))] pb-8' : ''">
     <div :class="obligatorio ? 'my-auto w-full max-w-sm self-center' : ''">
       <MarcaEmpresa v-if="obligatorio" class="mb-6" />
 

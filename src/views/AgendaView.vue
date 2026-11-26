@@ -65,7 +65,7 @@ function etiqueta(fecha) {
 
   <section v-for="g in grupos" :key="g.fecha" class="mb-4">
     <h2 class="mb-1.5 text-sm font-bold text-brand-800 first-letter:uppercase">{{ etiqueta(g.fecha) }}</h2>
-    <ul class="grid gap-2.5">
+    <ul class="grid gap-2.5 lg:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
       <li v-for="v in g.items" :key="v.id">
         <button class="tarjeta flex w-full gap-3 border-l-4 text-left active:bg-brand-50" :class="[bordeDeEstado(v.estado), { 'opacity-60': v.estado === 'Cancelada' }]" @click="$emit('abrir', v.id)">
           <span class="flex h-fit w-16 shrink-0 flex-col items-center rounded-xl bg-brand-50 py-1.5 text-brand-800">

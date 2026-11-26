@@ -4,6 +4,7 @@ import { useAuth } from '../composables/useAuth'
 import { modoDemo } from '../api'
 import CampoClave from '../components/CampoClave.vue'
 import MarcaEmpresa from '../components/MarcaEmpresa.vue'
+import { useConfiguracion } from '../composables/useConfiguracion'
 import { APP } from '../app'
 
 const { login } = useAuth()
@@ -23,10 +24,11 @@ async function entrar() {
     cargando.value = false
   }
 }
+const { fondoIngreso } = useConfiguracion()
 </script>
 
 <template>
-  <div class="flex min-h-dvh flex-col bg-gradient-to-b from-brand-900 via-brand-700 to-brand-500 px-5 pt-[max(2rem,env(safe-area-inset-top))] pb-8">
+  <div :style="fondoIngreso" class="flex min-h-dvh flex-col px-5 pt-[max(2rem,env(safe-area-inset-top))] pb-8">
     <div class="my-auto w-full max-w-sm self-center">
       <MarcaEmpresa grande class="mb-8" />
 

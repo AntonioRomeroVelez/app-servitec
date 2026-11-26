@@ -5,7 +5,8 @@ import { X } from 'lucide-vue-next'
 // Ventana modal para crear y editar. En el celular sube desde abajo como una hoja (casi pantalla completa, con su propio
 // desplazamiento); en pantallas grandes va centrada. Se cierra con la X o con Escape; tocar el fondo NO la cierra, para no
 // perder lo escrito por accidente. Mientras está abierta, la página de atrás no se desplaza.
-const props = defineProps({ titulo: { type: String, required: true } })
+// `ancho`: formularios largos que en computadora aprovechan más espacio
+const props = defineProps({ titulo: { type: String, required: true }, ancho: Boolean })
 const emit = defineEmits(['cerrar'])
 
 const idTitulo = useId()
@@ -35,7 +36,8 @@ onBeforeUnmount(() => {
         aria-modal="true"
         :aria-labelledby="idTitulo"
         tabindex="-1"
-        class="flex max-h-[94dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl outline-none sm:max-h-[90dvh] sm:rounded-2xl"
+        :class="props.ancho ? 'max-w-lg lg:max-w-4xl' : 'max-w-lg'"
+        class="flex max-h-[94dvh] w-full flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl outline-none sm:max-h-[90dvh] sm:rounded-2xl"
       >
         <header class="flex shrink-0 items-center justify-between gap-2 border-b border-brand-100 px-4 py-2.5">
           <h2 :id="idTitulo" class="truncate text-base font-bold text-brand-900">{{ props.titulo }}</h2>

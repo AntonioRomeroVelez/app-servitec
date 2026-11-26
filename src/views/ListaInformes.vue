@@ -45,7 +45,7 @@ onBeforeUnmount(() => clearTimeout(temporizador))
   <p v-if="cargando && !informes.length" class="py-10 text-center text-brand-700">Cargando…</p>
   <p v-else-if="!informes.length" class="py-10 text-center text-brand-700/70">No hay informes.</p>
 
-  <ul class="grid gap-2.5">
+  <ul class="grid gap-2.5 lg:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
     <li v-for="i in informes" :key="i.id">
       <button class="tarjeta grid w-full gap-1.5 border-l-4 text-left active:bg-brand-50" :class="bordeDeEstado(i.estado)" @click="$emit('abrir', i.id)">
         <span class="flex items-center justify-between gap-2">

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { entornoListo, datosVisita, datosInforme, checklistCompleto, JPEG_B64, MINI } from './ayudas.js'
+import { datosUsuario, entornoListo, datosVisita, datosInforme, checklistCompleto, JPEG_B64, MINI } from './ayudas.js'
 
 const hoyMas = (dias) => {
   const d = new Date()
@@ -144,8 +144,8 @@ test('un fallo o falta de cuota de correo no rompe la operación ni los avisos e
 
 test('correo de usuario: se valida, se puede quitar y nunca se expone a otros roles', () => {
   const { env, sa, admin } = entornoListo()
-  assert.match(env.llamar('usuarios_create', { data: { usuario: 'rosa', nombre: 'Rosa', rol: 'tecnico', clave: 'Temporal-2026', correo: 'no-es-correo' } }, sa).error, /Correo inválido/)
-  const u = env.ok('usuarios_create', { data: { usuario: 'rosa', nombre: 'Rosa', rol: 'tecnico', clave: 'Temporal-2026', correo: ' rosa@ferisel.test ' } }, sa)
+  assert.match(env.llamar('usuarios_create', { data: datosUsuario('rosa', 'tecnico', 30, { correo: 'no-es-correo' }) }, sa).error, /correo no es válido/)
+  const u = env.ok('usuarios_create', { data: datosUsuario('rosa', 'tecnico', 30, { correo: ' rosa@ferisel.test ' }) }, sa)
   assert.equal(u.correo, 'rosa@ferisel.test')
 
   assert.match(env.llamar('usuarios_update', { id: u.id, data: { correo: 'x@' } }, sa).error, /Correo inválido/)

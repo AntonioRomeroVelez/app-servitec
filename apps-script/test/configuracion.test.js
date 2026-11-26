@@ -6,8 +6,8 @@ import { CONFIG_DEFECTO } from '../../src/configuracion.js'
 import { paleta, contraste, textoSobre, hexAHsl, hslAHex } from '../../src/tema.js'
 
 const PNG_CHICO = 'data:image/png;base64,' + 'iVBORw0KGgo='.repeat(10)
-const config = (env) => env.ok('configuracion_get', {}) // sin token: la lectura es pública
-const guardar = (env, token, seccion, data) => env.ok('configuracion_update', { seccion, data }, token)
+const config = (env, token) => env.ok('configuracion_get', {}, token) // sin token: valores por defecto
+const guardar = (env, _token, seccion, data) => env.ok('configuracion_update', { seccion, data }, env.sup) // solo el superadministrador del sistema
 
 test('la configuración por defecto del servidor y la del frontend son idénticas (no se desincronizan)', () => {
   const env = crearEntorno()
@@ -19,16 +19,18 @@ test('la lectura es pública (sirve para la pantalla de ingreso) y no expone dat
   const r = env.llamar('configuracion_get', {}) // sin sesión
   assert.equal(r.ok, true)
   const claves = Object.keys(r.data).sort()
-  assert.deepEqual(claves, ['empresa', 'informes', 'logo', 'tema', 'tipos'])
+  assert.deepEqual(claves, ['empresa', 'fondoImagen', 'informes', 'logo', 'logoClaro', 'tema', 'tipos'])
   assert.ok(!JSON.stringify(r.data).match(/hash|salt|clave|token/i))
 })
 
-test('solo el superadmin modifica la configuración', () => {
+test('solo el superadministrador de la empresa modifica la configuración', () => {
   const { env, sa, admin, tec } = entornoListo()
-  for (const q of [admin, tec]) assert.equal(env.llamar('configuracion_update', { seccion: 'empresa', data: { nombre: 'X' } }, q.token).code, 'FORBIDDEN')
-  assert.equal(env.llamar('configuracion_update', { seccion: 'empresa', data: { nombre: 'Otra Empresa' } }, sa).ok, true)
-  assert.equal(config(env).empresa.nombre, 'Otra Empresa') // y todos (incluso sin sesión) ven el cambio de inmediato
-  assert.equal(env.llamar('configuracion_update', { seccion: 'inventada', data: {} }, sa).error, 'Sección inválida')
+  for (const q of [{ token: sa }, admin, tec]) assert.equal(env.llamar('configuracion_update', { seccion: 'empresa', data: { nombre: 'X' } }, q.token).code, 'FORBIDDEN')
+  assert.equal(env.llamar('configuracion_update', { seccion: 'empresa', data: { nombre: 'Otra Empresa' } }, env.sup).ok, true)
+  assert.equal(config(env, sa).empresa.nombre, 'Otra Empresa') // su empresa ve el cambio de inmediato
+  assert.equal(config(env, admin.token).empresa.nombre, 'Otra Empresa')
+  assert.equal(config(env).empresa.nombre, CONFIG_DEFECTO.empresa.nombre) // sin sesión no se conoce la empresa
+  assert.equal(env.llamar('configuracion_update', { seccion: 'inventada', data: {} }, env.sup).error, 'Sección inválida')
 })
 
 test('datos de la empresa: se guardan, se validan y lo no enviado queda en blanco', () => {
@@ -38,29 +40,29 @@ test('datos de la empresa: se guardan, se validan y lo no enviado queda en blanc
   assert.equal(r.empresa.ruc, '1790000000001')
   assert.equal(r.empresa.pie, 'Gracias por confiar en nosotros')
 
-  assert.match(env.llamar('configuracion_update', { seccion: 'empresa', data: { nombre: '  ' } }, sa).error, /nombre de la empresa/)
-  assert.match(env.llamar('configuracion_update', { seccion: 'empresa', data: { nombre: 'X', correo: 'no-es-correo' } }, sa).error, /Correo inválido/)
-  assert.match(env.llamar('configuracion_update', { seccion: 'empresa', data: { nombre: 'X'.repeat(61) } }, sa).error, /demasiado largo/)
-  assert.equal(config(env).empresa.nombre, 'Seguridad Total') // un intento rechazado no cambia nada
+  assert.match(env.llamar('configuracion_update', { seccion: 'empresa', data: { nombre: '  ' } }, env.sup).error, /nombre de la empresa/)
+  assert.match(env.llamar('configuracion_update', { seccion: 'empresa', data: { nombre: 'X', correo: 'no-es-correo' } }, env.sup).error, /Correo inválido/)
+  assert.match(env.llamar('configuracion_update', { seccion: 'empresa', data: { nombre: 'X'.repeat(61) } }, env.sup).error, /demasiado largo/)
+  assert.equal(config(env, sa).empresa.nombre, 'Seguridad Total') // un intento rechazado no cambia nada
 })
 
 test('colores: formato #RRGGBB y el principal debe dejar leer el texto blanco', () => {
   const { env, sa } = entornoListo()
   assert.equal(guardar(env, sa, 'tema', { primario: '#157347', acento: '#F59E0B' }).tema.acento, '#f59e0b') // normaliza a minúsculas
-  assert.match(env.llamar('configuracion_update', { seccion: 'tema', data: { primario: 'azul', acento: '#f59e0b' } }, sa).error, /#RRGGBB/)
-  assert.match(env.llamar('configuracion_update', { seccion: 'tema', data: { primario: '#ffee00', acento: '#f59e0b' } }, sa).error, /demasiado claro/)
-  assert.equal(config(env).tema.primario, '#157347')
+  assert.match(env.llamar('configuracion_update', { seccion: 'tema', data: { primario: 'azul', acento: '#f59e0b' } }, env.sup).error, /#RRGGBB/)
+  assert.match(env.llamar('configuracion_update', { seccion: 'tema', data: { primario: '#ffee00', acento: '#f59e0b' } }, env.sup).error, /demasiado claro/)
+  assert.equal(config(env, sa).tema.primario, '#157347')
 })
 
 test('logo: PNG, JPG o WebP razonablemente livianos; se puede quitar', () => {
   const { env, sa } = entornoListo()
   assert.equal(guardar(env, sa, 'logo', { logo: PNG_CHICO }).logo, PNG_CHICO)
-  assert.equal(config(env).logo, PNG_CHICO)
+  assert.equal(config(env, sa).logo, PNG_CHICO)
 
-  assert.match(env.llamar('configuracion_update', { seccion: 'logo', data: { logo: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=' } }, sa).error, /PNG, JPG o WebP/) // SVG puede llevar scripts
-  assert.match(env.llamar('configuracion_update', { seccion: 'logo', data: { logo: 'https://sitio.com/logo.png' } }, sa).error, /PNG, JPG o WebP/)
-  assert.match(env.llamar('configuracion_update', { seccion: 'logo', data: { logo: 'data:image/png;base64,' + 'A'.repeat(46000) } }, sa).error, /pesado/)
-  assert.equal(config(env).logo, PNG_CHICO)
+  assert.match(env.llamar('configuracion_update', { seccion: 'logo', data: { logo: 'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=' } }, env.sup).error, /PNG, JPG o WebP/) // SVG puede llevar scripts
+  assert.match(env.llamar('configuracion_update', { seccion: 'logo', data: { logo: 'https://sitio.com/logo.png' } }, env.sup).error, /PNG, JPG o WebP/)
+  assert.match(env.llamar('configuracion_update', { seccion: 'logo', data: { logo: 'data:image/png;base64,' + 'A'.repeat(46000) } }, env.sup).error, /pesado/)
+  assert.equal(config(env, sa).logo, PNG_CHICO)
 
   assert.equal(guardar(env, sa, 'logo', { logo: '' }).logo, '') // quitar el logo
 })
@@ -78,7 +80,7 @@ test('informes: el prefijo cambia el número y las secciones del PDF se guardan'
   assert.equal(env.ok('informes_get', { id: a.id }, admin.token).numero, `INF-${anio}-0001`)
 
   for (const malo of ['A', 'ABCDEFG', 'IN F', 'inf-1', '']) {
-    assert.match(env.llamar('configuracion_update', { seccion: 'informes', data: { prefijo: malo } }, sa).error, /prefijo/, malo)
+    assert.match(env.llamar('configuracion_update', { seccion: 'informes', data: { prefijo: malo } }, env.sup).error, /prefijo/, malo)
   }
 })
 
@@ -90,21 +92,21 @@ test('tipos de visita y checklists: se editan, se validan y no afectan lo ya reg
   assert.deepEqual(cfg.tipos, [{ nombre: 'Instalación', checklist: ['Montaje', 'Pruebas'] }, { nombre: 'Otro', checklist: [] }]) // limpia espacios y vacíos
   assert.equal(env.ok('visitas_get', { id: v.id }, admin.token).tipo, 'Visita técnica') // la visita conserva su tipo aunque ya no esté en la lista
 
-  const mal = (tipos, patron) => assert.match(env.llamar('configuracion_update', { seccion: 'tipos', data: { tipos } }, sa).error, patron)
+  const mal = (tipos, patron) => assert.match(env.llamar('configuracion_update', { seccion: 'tipos', data: { tipos } }, env.sup).error, patron)
   mal([], /entre 1 y 12/)
   mal(Array.from({ length: 13 }, (_, i) => ({ nombre: 'T' + i, checklist: [] })), /entre 1 y 12/)
   mal([{ nombre: '', checklist: [] }], /necesita un nombre/)
   mal([{ nombre: 'Banco', checklist: [] }, { nombre: ' BANCO ', checklist: [] }], /repetido/)
   mal([{ nombre: 'A', checklist: Array.from({ length: 31 }, (_, i) => 'ítem ' + i) }], /Máximo 30/)
   mal([{ nombre: 'A', checklist: ['x'.repeat(101)] }], /demasiado largo/)
-  assert.equal(config(env).tipos[0].nombre, 'Instalación')
+  assert.equal(config(env, sa).tipos[0].nombre, 'Instalación')
 })
 
 test('restablecer una sección vuelve a los valores por defecto', () => {
   const { env, sa } = entornoListo()
   guardar(env, sa, 'empresa', { nombre: 'Otra' })
   guardar(env, sa, 'tema', { primario: '#157347', acento: '#f59e0b' })
-  const r = env.ok('configuracion_update', { seccion: 'empresa', restablecer: true }, sa)
+  const r = env.ok('configuracion_update', { seccion: 'empresa', restablecer: true }, env.sup)
   assert.deepEqual(r.empresa, CONFIG_DEFECTO.empresa)
   assert.equal(r.tema.primario, '#157347') // las demás secciones no se tocan
 })
@@ -120,7 +122,7 @@ test('la configuración queda en la hoja "Configuración" y cada cambio en la bi
   assert.deepEqual(filas.slice(1).map((f) => f[0]).sort(), ['empresa', 'tema'])
   assert.equal(env.hoja('Configuración').formatos[2], '@') // el valor (JSON o logo) se guarda como texto
   assert.equal(env.hoja('Configuración').formatos[4], 'dd-MM-yyyy HH:mm')
-  assert.equal(filas.find((f) => f[0] === 'empresa')[2], 'superadmin') // quién lo cambió
+  assert.equal(filas.find((f) => f[0] === 'empresa')[2], 'servitec') // quién lo cambió: el superadministrador de la empresa
 
   const bitacora = env.hoja('Bitácora').filas.map((f) => f[4] + ' | ' + f[5])
   assert.ok(bitacora.includes('Configuración modificada | Datos de la empresa'))
@@ -146,8 +148,8 @@ test('un dato dañado en la hoja no rompe la app: se usa el valor por defecto', 
   const { env, sa } = entornoListo()
   guardar(env, sa, 'empresa', { nombre: 'Otra' })
   env.hoja('Configuración').filas[1][1] = '{esto no es json' // alguien editó la celda a mano
-  env.llamar('configuracion_update', { seccion: 'tipos', data: { tipos: [{ nombre: 'Solo', checklist: [] }] } }, sa) // invalida la caché
-  const r = config(env)
+  env.llamar('configuracion_update', { seccion: 'tipos', data: { tipos: [{ nombre: 'Solo', checklist: [] }] } }, env.sup) // invalida la caché
+  const r = config(env, sa)
   assert.deepEqual(r.empresa, CONFIG_DEFECTO.empresa)
   assert.equal(r.tipos[0].nombre, 'Solo')
 })

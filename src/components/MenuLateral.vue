@@ -62,7 +62,7 @@ function alTeclear(e) {
         @keydown="alTeclear"
       >
         <!-- Cabecera: marca y usuario -->
-        <div class="bg-brand-800 px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4 text-white">
+        <div class="bg-encabezado px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4 text-white">
           <div class="flex items-start justify-between gap-2">
             <MarcaEmpresa class="text-left" />
             <button class="-mt-1 -mr-2 flex size-10 items-center justify-center rounded-full active:bg-white/10" aria-label="Cerrar menú" @click="emit('cerrar')">
@@ -75,9 +75,9 @@ function alTeclear(e) {
               <p class="truncate text-sm font-semibold">{{ usuario.nombre }}</p>
               <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-brand-100">
                 @{{ usuario.usuario }}
-                <span class="rounded-full bg-acento px-2 py-px text-[10px] font-bold text-acento-texto">{{ usuario.plataforma ? 'Dueño de la plataforma' : usuario.rol }}</span>
+                <span class="rounded-full bg-acento px-2 py-px text-[10px] font-bold text-acento-texto">{{ usuario.rol === 'root' ? 'Root' : usuario.plataforma ? 'Dueño de la plataforma' : usuario.rol }}</span>
               </p>
-              <p v-if="usuario.plataforma" class="mt-0.5 text-[11px] text-brand-100/80">Superadmin global · también {{ usuario.rol }} de su empresa</p>
+              <p v-if="usuario.plataforma && usuario.rol !== 'root'" class="mt-0.5 text-[11px] text-brand-100/80">Superadmin global · también {{ usuario.rol }} de su empresa</p>
             </div>
           </div>
         </div>

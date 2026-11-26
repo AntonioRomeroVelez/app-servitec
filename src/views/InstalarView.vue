@@ -1,6 +1,7 @@
 <script setup>
 import PanelInstalar from '../components/PanelInstalar.vue'
 import MarcaEmpresa from '../components/MarcaEmpresa.vue'
+import { useConfiguracion } from '../composables/useConfiguracion'
 import { useInstalacion } from '../composables/useInstalacion'
 import { APP } from '../app'
 import { Smartphone, WifiOff, Zap } from 'lucide-vue-next'
@@ -10,11 +11,12 @@ import { Smartphone, WifiOff, Zap } from 'lucide-vue-next'
 defineProps({ completa: Boolean })
 defineEmits(['continuar'])
 const { instalada } = useInstalacion()
+const { fondoIngreso } = useConfiguracion()
 </script>
 
 <template>
-  <div :class="completa ? 'flex min-h-dvh flex-col bg-gradient-to-b from-brand-900 via-brand-700 to-brand-500 px-5 pt-[max(2rem,env(safe-area-inset-top))] pb-8' : ''">
-    <div :class="completa ? 'my-auto w-full max-w-sm self-center' : 'mx-auto w-full max-w-md'">
+  <div :style="completa ? fondoIngreso : null" :class="completa ? 'flex min-h-dvh flex-col px-5 pt-[max(2rem,env(safe-area-inset-top))] pb-8' : ''">
+    <div :class="completa ? 'my-auto w-full max-w-sm self-center' : 'w-full'">
       <MarcaEmpresa v-if="completa" grande class="mb-6" />
 
       <section class="tarjeta grid gap-4 p-5">

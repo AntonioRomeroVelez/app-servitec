@@ -8,7 +8,7 @@ import { Camera, CloudUpload, X } from 'lucide-vue-next'
 const props = defineProps({ visitaId: { type: String, required: true }, puedeSubir: Boolean })
 
 const { lista, cargar, subir, eliminar, obtener } = useFotos()
-const { usuario, esSuper } = useAuth()
+const { usuario, puedeAgendar } = useAuth() // superadmin y admin borran cualquier foto de la empresa
 
 const fotos = computed(() => lista(props.visitaId))
 const cargando = ref(true)
@@ -17,7 +17,7 @@ const error = ref('')
 const visor = ref(null) // { foto, src }
 const cargandoVisor = ref(false)
 
-const puedeBorrar = (f) => esSuper.value || f.autor === usuario.value.usuario
+const puedeBorrar = (f) => puedeAgendar.value || f.autor === usuario.value.usuario
 const kb = (bytes) => `${Math.round(bytes / 1024)} KB`
 
 onMounted(async () => {
@@ -79,7 +79,7 @@ async function borrar() {
     <p v-if="cargando" class="text-sm text-brand-700/70">Cargando fotos…</p>
     <p v-else-if="!fotos.length" class="text-sm text-brand-700/70">Aún no hay fotos.</p>
 
-    <ul v-if="fotos.length" class="grid grid-cols-3 gap-2 sm:grid-cols-4">
+    <ul v-if="fotos.length" class="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8">
       <li v-for="f in fotos" :key="f.id">
         <button class="relative block aspect-square w-full overflow-hidden rounded-xl bg-brand-100" @click="abrir(f)">
           <img :src="f.mini" :alt="f.nombre" class="size-full object-cover" loading="lazy" />

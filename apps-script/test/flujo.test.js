@@ -1,10 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { entornoListo, datosVisita, datosInforme, checklistCompleto, checklistIncompleto, JPEG_B64, MINI } from './ayudas.js'
+import { datosUsuario, entornoListo, datosVisita, datosInforme, checklistCompleto, checklistIncompleto, JPEG_B64, MINI } from './ayudas.js'
 
 const anio = new Date().getFullYear()
 
-test('visibilidad de visitas: técnico asignado, admin autor y superadmin', () => {
+test('visibilidad de visitas: técnico asignado, administradores y superadmin', () => {
   const { env, sa, admin, admin2, tec, tec2 } = entornoListo()
   const v = env.ok('visitas_create', { data: datosVisita() }, admin.token)
 
@@ -12,14 +12,14 @@ test('visibilidad de visitas: técnico asignado, admin autor y superadmin', () =
   assert.deepEqual(ids(admin.token), [v.id])
   assert.deepEqual(ids(tec.token), [v.id]) // carlos es el responsable
   assert.deepEqual(ids(sa), [v.id])
-  assert.deepEqual(ids(admin2.token), []) // otro admin no la ve
-  assert.deepEqual(ids(tec2.token), []) // otro técnico tampoco
+  assert.deepEqual(ids(admin2.token), [v.id]) // todos los administradores ven las visitas de la empresa
+  assert.deepEqual(ids(tec2.token), []) // otro técnico no
 })
 
-test('solo se puede asignar a un técnico activo existente', () => {
+test('solo se puede asignar a un usuario activo existente', () => {
   const { env, admin } = entornoListo()
   assert.match(env.llamar('visitas_create', { data: datosVisita({ responsable: 'inventado' }) }, admin.token).error, /Técnico inválido/)
-  assert.match(env.llamar('visitas_create', { data: datosVisita({ responsable: 'marta' }) }, admin.token).error, /Técnico inválido/) // marta es admin
+  assert.equal(env.llamar('visitas_create', { data: datosVisita({ responsable: 'marta' }) }, admin.token).ok, true) // un admin también atiende visitas
 })
 
 test('el técnico no crea ni elimina visitas y solo cambia estado y notas', () => {
@@ -91,23 +91,21 @@ test('listado de informes: livianos (sin descripción, checklist ni firma); get 
   assert.equal(completo._row, undefined) // nunca se expone el número de fila
 })
 
-test('finalizar exige checklist completo; luego queda cerrado salvo para el superadmin', () => {
+test('finalizar exige checklist completo; luego queda cerrado salvo para un administrador', () => {
   const { env, sa, admin, tec } = entornoListo()
   const v = env.ok('visitas_create', { data: datosVisita() }, admin.token)
   env.ok('visitas_update', { id: v.id, data: { estado: 'Aceptada' } }, tec.token)
 
-  assert.match(env.llamar('informes_create', { data: datosInforme({ visitaId: v.id, estado: 'Finalizado', checklist: checklistIncompleto }) }, tec.token).error, /Completa el checklist/)
+  assert.match(env.llamar('informes_create', { data: datosInforme({ visitaId: v.id, estado: 'Finalizado', checklist: checklistIncompleto }) }, tec.token).error, /cada actividad necesita/)
   const inf = env.ok('informes_create', { data: datosInforme({ visitaId: v.id, checklist: checklistIncompleto }) }, tec.token)
-  assert.match(env.llamar('informes_update', { id: inf.id, data: { estado: 'Finalizado' } }, tec.token).error, /Completa el checklist/)
+  assert.match(env.llamar('informes_update', { id: inf.id, data: { estado: 'Finalizado' } }, tec.token).error, /cada actividad necesita/)
 
   env.ok('informes_update', { id: inf.id, data: { estado: 'Finalizado', checklist: checklistCompleto } }, tec.token)
 
-  // cerrado: ni el autor, ni el admin de la visita pueden modificarlo o eliminarlo
-  for (const quien of [tec, admin]) {
-    assert.equal(env.llamar('informes_update', { id: inf.id, data: { titulo: 'x' } }, quien.token).code, 'FORBIDDEN')
-    assert.equal(env.llamar('informes_delete', { id: inf.id }, quien.token).code, 'FORBIDDEN')
-  }
-  assert.equal(env.llamar('informes_update', { id: inf.id, data: { titulo: 'Reabierto' } }, sa).ok, true)
+  // cerrado: ni su autor puede modificarlo o eliminarlo; un administrador sí
+  assert.equal(env.llamar('informes_update', { id: inf.id, data: { titulo: 'x' } }, tec.token).code, 'FORBIDDEN')
+  assert.equal(env.llamar('informes_delete', { id: inf.id }, tec.token).code, 'FORBIDDEN')
+  assert.equal(env.llamar('informes_update', { id: inf.id, data: { titulo: 'Reabierto' } }, admin.token).ok, true)
 })
 
 test('el número y el vínculo con la visita no se pueden cambiar', () => {
@@ -122,7 +120,7 @@ test('el número y el vínculo con la visita no se pueden cambiar', () => {
   assert.equal(r.titulo, 'Nuevo')
 })
 
-test('visibilidad de informes: autor, admin de la visita y superadmin', () => {
+test('visibilidad de informes: autor, administradores y superadmin', () => {
   const { env, sa, admin, admin2, tec, tec2 } = entornoListo()
   const v = env.ok('visitas_create', { data: datosVisita() }, admin.token)
   env.ok('visitas_update', { id: v.id, data: { estado: 'Aceptada' } }, tec.token)
@@ -130,12 +128,12 @@ test('visibilidad de informes: autor, admin de la visita y superadmin', () => {
 
   const ids = (token, p = {}) => env.ok('informes_list', p, token).items.map((x) => x.id)
   assert.deepEqual(ids(tec.token), [inf.id])
-  assert.deepEqual(ids(admin.token), [inf.id]) // el admin que agendó la visita
+  assert.deepEqual(ids(admin.token), [inf.id])
   assert.deepEqual(ids(admin.token, { visitaId: v.id }), [inf.id])
   assert.deepEqual(ids(sa), [inf.id])
-  assert.deepEqual(ids(admin2.token), [])
+  assert.deepEqual(ids(admin2.token), [inf.id])
   assert.deepEqual(ids(tec2.token), [])
-  assert.equal(env.llamar('informes_get', { id: inf.id }, admin2.token).ok, false)
+  assert.equal(env.llamar('informes_get', { id: inf.id }, tec2.token).ok, false)
   assert.equal(env.llamar('informes_get', { id: inf.id }, admin.token).ok, true)
 })
 
@@ -204,11 +202,13 @@ test('fotos: reglas, estructura de carpetas en Drive, permisos y papelera', () =
   const f1 = env.ok('fotos_upload', { visitaId: v.id, imagen: JPEG_B64, mini: MINI }, tec.token)
   const f2 = env.ok('fotos_upload', { visitaId: v.id, imagen: JPEG_B64, mini: MINI }, admin.token)
 
-  // Drive: Raíz / "NOMBRE (usuario)" / AAAA-MM / archivo
-  const raiz = env.drive.raices[0]
-  assert.equal(raiz.nombre, 'Informes Ferisel - Fotos')
-  assert.deepEqual(raiz.hijos.map((c) => c.nombre).sort(), ['CARLOS (carlos)', 'LUCIA (lucia)'])
-  const mes = raiz.hijos.find((c) => c.nombre === 'CARLOS (carlos)').hijos[0]
+  // Drive: Raíz / Nombre de la empresa / "NOMBRE (usuario)" / AAAA-MM / archivo
+  assert.equal(env.drive.raices[0].nombre, 'ServiTec - Empresas')
+  assert.equal(env.drive.raices[0].hijos.length, 1)
+  const raiz = env.drive.raices[0].hijos[0]
+  assert.equal(raiz.nombre, 'ServiTec')
+  assert.deepEqual(raiz.hijos.map((c) => c.nombre).sort(), ['CARLOS PRUEBA (carlos)', 'LUCIA PRUEBA (lucia)'])
+  const mes = raiz.hijos.find((c) => c.nombre === 'CARLOS PRUEBA (carlos)').hijos[0]
   assert.equal(mes.nombre, '2026-11')
   assert.match(mes.archivos[0].nombre, /^2026-11-20_Cliente-Nandu-S-A_[0-9a-f]{6}\.jpg$/)
 
@@ -221,8 +221,8 @@ test('fotos: reglas, estructura de carpetas en Drive, permisos y papelera', () =
   assert.equal(env.llamar('fotos_get', { id: f1.id }, tec2.token).ok, false)
   assert.equal(env.llamar('fotos_list', { visitaId: v.id }, tec2.token).ok, false)
 
-  // borrar: solo quien la subió o el superadmin
-  assert.equal(env.llamar('fotos_delete', { id: f1.id }, admin.token).code, 'FORBIDDEN')
+  // borrar: quien la subió o un administrador
+  assert.equal(env.llamar('fotos_delete', { id: f2.id }, tec.token).code, 'FORBIDDEN')
   assert.equal(env.llamar('fotos_delete', { id: f1.id }, tec.token).ok, true)
   assert.equal(mes.archivos[0].papelera, true)
   assert.equal(env.ok('fotos_list', { visitaId: v.id }, sa).length, 1)
@@ -248,12 +248,11 @@ test('rechaza acciones inválidas y sesiones sin token', () => {
   assert.match(env.llamar('accion_inventada', {}, e.sa).error, /Acción inválida/)
 })
 
-test('solo el superadmin gestiona usuarios', () => {
+test('el técnico no gestiona usuarios y nadie crea otros roles', () => {
   const { env, admin, tec } = entornoListo()
-  for (const q of [admin, tec]) {
-    assert.equal(env.llamar('usuarios_list', {}, q.token).code, 'FORBIDDEN')
-    assert.equal(env.llamar('usuarios_create', { data: { usuario: 'zzz', nombre: 'Z', rol: 'admin', clave: 'Temporal-2026' } }, q.token).code, 'FORBIDDEN')
-  }
+  assert.equal(env.llamar('usuarios_list', {}, tec.token).code, 'FORBIDDEN')
+  assert.equal(env.llamar('usuarios_create', { data: datosUsuario('zzz', 'admin', 40) }, tec.token).code, 'FORBIDDEN')
+  for (const rol of ['superadmin', 'root']) assert.match(env.llamar('usuarios_create', { data: datosUsuario('zzz', rol, 40) }, admin.token).error, /rol|Solo puedes/)
 })
 
 test('los usuarios se sirven desde caché y la caché se invalida al modificarlos', () => {
@@ -269,4 +268,11 @@ test('los usuarios se sirven desde caché y la caché se invalida al modificarlo
   const lista = env.ok('usuarios_list', {}, sa)
   env.ok('usuarios_update', { id: lista.find((u) => u.usuario === 'carlos').id, data: { activo: false } }, sa)
   assert.equal(env.llamar('me', {}, tec.token).code, 'AUTH')
+})
+
+test('actividades: se finaliza con No cumple o Falla sin observación aparte, pero no sin descripción', () => {
+  const { env, tec } = entornoListo()
+  const crear = (items) => env.llamar('informes_create', { data: datosInforme({ estado: 'Finalizado', checklist: JSON.stringify(items) }) }, tec.token)
+  assert.equal(crear([{ item: 'Cambié el disco', resultado: 'no', obs: '' }, { item: 'Revisé el cableado', resultado: 'falla', obs: '' }]).ok, true)
+  assert.match(crear([{ item: '   ', resultado: 'ok', obs: '' }]).error, /cada actividad necesita/)
 })

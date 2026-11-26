@@ -48,7 +48,7 @@ onMounted(cargar)
   <p v-if="cargando && !items.length" class="py-10 text-center text-brand-700">Cargando…</p>
   <p v-else-if="!mostradas.length" class="py-10 text-center text-brand-700/70">{{ soloSinLeer ? 'No tienes notificaciones sin leer.' : 'No tienes notificaciones.' }}</p>
 
-  <ul class="grid gap-2.5">
+  <ul class="grid gap-2.5 lg:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
     <li v-for="n in pag.visibles.value" :key="n.id">
       <button class="tarjeta flex w-full gap-3 border-l-4 text-left active:bg-brand-50" :class="n.leida ? 'border-l-brand-100' : 'border-l-acento bg-brand-50'" @click="abrir(n)">
         <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full" :class="n.leida ? 'bg-brand-100 text-brand-700' : 'bg-brand-600 text-white'">
