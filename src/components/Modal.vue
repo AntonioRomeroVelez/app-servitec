@@ -1,3 +1,7 @@
+<script>
+const abiertas = [] // ventanas abiertas, de la de abajo a la de encima
+</script>
+
 <script setup>
 import { onMounted, onBeforeUnmount, ref, useId } from 'vue'
 import { X } from 'lucide-vue-next'
@@ -12,16 +16,19 @@ const emit = defineEmits(['cerrar'])
 const idTitulo = useId()
 const caja = ref(null)
 const cerrar = () => emit('cerrar')
-const alTeclear = (e) => e.key === 'Escape' && cerrar()
+const yo = Symbol()
+const alTeclear = (e) => e.key === 'Escape' && abiertas.at(-1) === yo && !e.defaultPrevented && (e.preventDefault(), cerrar())
 
 let overflowAnterior = ''
 onMounted(() => {
+  abiertas.push(yo)
   overflowAnterior = document.body.style.overflow
   document.body.style.overflow = 'hidden'
   document.addEventListener('keydown', alTeclear)
   caja.value?.focus({ preventScroll: true }) // el foco entra al diálogo sin abrir el teclado del celular
 })
 onBeforeUnmount(() => {
+  abiertas.splice(abiertas.indexOf(yo), 1)
   document.body.style.overflow = overflowAnterior
   document.removeEventListener('keydown', alTeclear)
 })

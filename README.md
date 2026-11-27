@@ -221,7 +221,7 @@ Son 167 pruebas: login, bloqueo y cambio obligatorio de clave, permisos por rol,
 
 - **Número correlativo** por año (`INF-2026-0001`), asignado por el backend.
 - **Actividades realizadas** (`src/plantillas.js`): un informe nuevo empieza con dos casillas vacías (con un ejemplo del tipo de visita como texto de ayuda); el técnico escribe lo que hizo, agrega las que necesite o las quita, y marca cada una como Cumple / No cumple / Falla. Se guardan como JSON en la columna `checklist`.
-- **Firma del cliente** (dibujada en pantalla, PNG pequeño) y nombre de quien recibe.
+- **Firma del cliente** (se abre en una ventana grande para firmar con el dedo o el ratón; se guarda como PNG pequeño) y nombre de quien recibe.
 - **Finalizado = cerrado:** para finalizar, cada actividad necesita descripción y resultado. Después solo un administrador puede editarlo o eliminarlo (se valida en `Code.gs`).
 - **PDF:** el botón "Descargar PDF" genera y descarga un archivo A4 (`INF-0001.pdf`) con el logo y los datos de la empresa como encabezado, checklist, observaciones, fotos de la visita, firma del cliente y pie con numeración de páginas. Lo que incluye se elige en Ajustes > Informes.
 

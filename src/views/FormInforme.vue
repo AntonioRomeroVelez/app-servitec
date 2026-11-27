@@ -148,7 +148,7 @@ async function enviar() {
       <label class="etiqueta">Recibido por
         <input v-model.trim="form.firmante" class="campo" autocomplete="off" placeholder="Nombre y apellido de quien recibe" />
       </label>
-      <FirmaPad v-model="form.firma" />
+      <FirmaPad v-model="form.firma" :nombre="form.firmante" />
     </section>
 
     <p v-if="error" class="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert"><CircleAlert :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />{{ error }}</p>

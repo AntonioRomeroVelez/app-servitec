@@ -1,84 +1,38 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { PenLine, Eraser } from 'lucide-vue-next'
+import { ref } from 'vue'
+import { PenLine, Trash2 } from 'lucide-vue-next'
+import FirmaModal from './FirmaModal.vue'
+import { confirmar } from '../composables/useConfirmar'
 
-// Firma manuscrita en canvas. v-model = data URL PNG (fondo transparente, ~3-8 KB).
+// Campo de firma del informe: muestra la firma guardada y abre una ventana grande para firmar. v-model = data URL PNG.
 const modelo = defineModel({ type: String, default: '' })
+defineProps({ nombre: { type: String, default: '' } })
+const abierto = ref(false)
 
-const W = 360
-const H = 140
-const canvas = ref(null)
-let ctx
-let dibujando = false
-
-onMounted(() => {
-  ctx = canvas.value.getContext('2d')
-  ctx.lineWidth = 2.5
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
-  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--color-brand-900').trim() || '#0a2a5e' // sigue los colores de la marca
-  if (modelo.value) {
-    const img = new Image()
-    img.onload = () => ctx.drawImage(img, 0, 0)
-    img.src = modelo.value
-  }
-})
-
-function punto(e) {
-  const r = canvas.value.getBoundingClientRect()
-  return { x: ((e.clientX - r.left) / r.width) * W, y: ((e.clientY - r.top) / r.height) * H }
+function aceptar(firma) {
+  modelo.value = firma
+  abierto.value = false
 }
-
-function inicio(e) {
-  dibujando = true
-  canvas.value.setPointerCapture(e.pointerId)
-  const { x, y } = punto(e)
-  ctx.beginPath()
-  ctx.moveTo(x, y)
-  ctx.lineTo(x + 0.1, y + 0.1) // un toque deja un punto
-  ctx.stroke()
-}
-
-function mover(e) {
-  if (!dibujando) return
-  const { x, y } = punto(e)
-  ctx.lineTo(x, y)
-  ctx.stroke()
-}
-
-function fin() {
-  if (!dibujando) return
-  dibujando = false
-  modelo.value = canvas.value.toDataURL('image/png')
-}
-
-function borrar() {
-  ctx.clearRect(0, 0, W, H)
-  modelo.value = ''
+async function borrar() {
+  if (await confirmar({ titulo: '¿Borrar la firma?', texto: 'Habrá que firmar de nuevo.', confirmar: 'Borrar', peligro: true })) modelo.value = ''
 }
 </script>
 
 <template>
-  <div class="grid max-w-xl gap-1.5">
-    <div class="relative">
-    <canvas
-      ref="canvas"
-      :width="W"
-      :height="H"
-      class="block w-full cursor-crosshair touch-none rounded-xl border-2 border-dashed border-brand-300 bg-white"
-      aria-label="Área de firma"
-      @pointerdown.prevent="inicio"
-      @pointermove.prevent="mover"
-      @pointerup="fin"
-      @pointercancel="fin"
-    />
-      <!-- Línea y texto guía: no estorban al dibujar y el texto desaparece al firmar -->
-      <span class="pointer-events-none absolute inset-x-8 bottom-8 border-b border-brand-200" aria-hidden="true" />
-      <span v-if="!modelo" class="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 text-sm text-brand-400" aria-hidden="true"><PenLine :size="18" />Firme aquí</span>
+  <div class="grid max-w-xl gap-2">
+    <button
+      type="button"
+      class="flex min-h-28 w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-brand-300 bg-white p-3 font-semibold text-brand-700 active:bg-brand-50"
+      :aria-label="modelo ? 'Cambiar la firma' : 'Firmar'"
+      @click="abierto = true"
+    >
+      <img v-if="modelo" :src="modelo" alt="Firma del cliente" class="max-h-28 max-w-full object-contain" />
+      <template v-else><PenLine :size="20" aria-hidden="true" />Tocar para firmar</template>
+    </button>
+    <div v-if="modelo" class="flex justify-between gap-2 text-sm">
+      <button type="button" class="flex min-h-10 items-center gap-1.5 px-2 font-semibold text-brand-700" @click="abierto = true"><PenLine :size="16" aria-hidden="true" />Cambiar firma</button>
+      <button type="button" class="flex min-h-10 items-center gap-1.5 px-2 font-semibold text-red-700" @click="borrar"><Trash2 :size="16" aria-hidden="true" />Borrar</button>
     </div>
-    <div class="flex items-center justify-between text-xs text-brand-700/70">
-      <span>Firma con el dedo o el ratón dentro del recuadro</span>
-      <button type="button" class="flex min-h-9 items-center gap-1.5 px-2 font-semibold text-brand-700" @click="borrar"><Eraser :size="14" aria-hidden="true" />Borrar firma</button>
-    </div>
+    <FirmaModal v-if="abierto" :inicial="modelo" :nombre="nombre" @aceptar="aceptar" @cerrar="abierto = false" />
   </div>
 </template>
