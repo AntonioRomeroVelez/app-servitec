@@ -14,6 +14,7 @@ export const CONFIG_DEFECTO = {
     { nombre: 'Incidente', checklist: ['Evento verificado con el cliente', 'Grabaciones del evento revisadas', 'Equipos afectados identificados', 'Acción correctiva realizada', 'Cliente informado'] },
     { nombre: 'Otro', checklist: [] },
   ],
+  whatsapp: { activo: true, codigoPais: '593', formatoFecha: 'corta', formatoHora: '24', ejemplos: {} },
 }
 
 export const clonar = (o) => JSON.parse(JSON.stringify(o))
@@ -22,7 +23,7 @@ export const clonar = (o) => JSON.parse(JSON.stringify(o))
 export function combinar(cfg) {
   const base = clonar(CONFIG_DEFECTO)
   if (!cfg || typeof cfg !== 'object') return base
-  for (const k of ['empresa', 'tema', 'informes']) if (cfg[k] && typeof cfg[k] === 'object') base[k] = { ...base[k], ...cfg[k] }
+  for (const k of ['empresa', 'tema', 'informes', 'whatsapp']) if (cfg[k] && typeof cfg[k] === 'object') base[k] = { ...base[k], ...cfg[k] }
   for (const k of ['logo', 'logoClaro', 'fondoImagen']) if (typeof cfg[k] === 'string') base[k] = cfg[k]
   if (Array.isArray(cfg.tipos) && cfg.tipos.length) base.tipos = cfg.tipos
   return base

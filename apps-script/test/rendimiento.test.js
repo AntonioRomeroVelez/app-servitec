@@ -10,7 +10,7 @@ const NV = 10000 // visitas
 const NF = 5000 // fotos
 const COLS_INFORMES = 18 // columnas totales (lo que leía el diseño anterior por fila)
 const LIGERAS_INFORMES = 15 // las 14 livianas más la empresa
-const COLS_VISITAS = 17
+const COLS_VISITAS = 18
 
 const autores = ['lucia', 'marta', 'carlos', 'diego']
 const firma = 'data:image/png;base64,' + 'A'.repeat(10000) // una firma real pesa ~10 KB

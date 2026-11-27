@@ -2,7 +2,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { crearEntorno, CLAVE_INICIAL } from './harness.js'
-import { entornoListo, conEmpresa, datosEmpresa, datosVisita, datosInforme, datosUsuario, cedulaDe, CEDULA_ROOT, JPEG_B64, MINI } from './ayudas.js'
+import { entornoListo, conEmpresa, datosEmpresa, datosVisita, datosInforme, datosUsuario, cedulaDe, CEDULA_ROOT, JPEG_B64, MINI, checklistCompleto } from './ayudas.js'
 
 const NUEVA = 'Clave-Definitiva-77'
 
@@ -228,7 +228,7 @@ test('solo el superadministrador de cada empresa la personaliza', () => {
 
 test('un administrador corrige o elimina informes finalizados y elimina clientes sin visitas; el técnico no', () => {
   const { env, admin, tec } = entornoListo()
-  const i = env.ok('informes_create', { data: datosInforme({ estado: 'Finalizado' }) }, tec.token)
+  const i = env.ok('informes_create', { data: datosInforme({ estado: 'Finalizado', checklist: checklistCompleto }) }, tec.token)
   assert.equal(env.llamar('informes_update', { id: i.id, data: { titulo: 'x' } }, tec.token).code, 'FORBIDDEN')
   assert.equal(env.llamar('informes_delete', { id: i.id }, tec.token).code, 'FORBIDDEN')
   assert.equal(env.llamar('informes_update', { id: i.id, data: { titulo: 'Corregido' } }, admin.token).ok, true)
@@ -263,7 +263,7 @@ test('cada empresa tiene su carpeta en Drive con su hoja de cálculo y sus fotos
   for (const f of empresas) {
     const archivo = env.drive.hojasDeCalculo.get(f[8])
     assert.equal(archivo.carpeta.getId(), f[9]) // la hoja está dentro de la carpeta de su empresa
-    assert.deepEqual([...env.libros.get(f[8]).hojas.keys()].sort(), ['Bitácora', 'Clientes', 'Configuración', 'Fotos', 'Informes', 'Notificaciones', 'Visitas'])
+    assert.deepEqual([...env.libros.get(f[8]).hojas.keys()].sort(), ['Bitácora', 'Clientes', 'Configuración', 'Envíos WhatsApp', 'Fotos', 'Informes', 'Notificaciones', 'Plantillas WhatsApp', 'Visitas'])
   }
   // la principal solo tiene el índice de empresas y usuarios (y la bitácora de lo que no es de ninguna empresa)
   assert.ok([...env.principal.hojas.keys()].every((n) => ['Empresas', 'Usuarios', 'Bitácora'].includes(n)))

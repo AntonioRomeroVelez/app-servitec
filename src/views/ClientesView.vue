@@ -1,7 +1,11 @@
 <script setup>
+import BotonNuevo from '../components/BotonNuevo.vue'
+import Cargando from '../components/Cargando.vue'
+import Vacio from '../components/Vacio.vue'
+import PieFormulario from '../components/PieFormulario.vue'
 import { confirmar } from '../composables/useConfirmar'
 import { ref, reactive, watch, onMounted, onBeforeUnmount } from 'vue'
-import { CalendarPlus, ChevronDown, ChevronUp, MapPin, Pencil, Phone, Plus, Trash2, X } from 'lucide-vue-next'
+import { Building2, CalendarPlus, History, MapPin, Pencil, Phone, Trash2 } from 'lucide-vue-next'
 import { call } from '../api'
 import Avatar from '../components/Avatar.vue'
 import Dato from '../components/Dato.vue'
@@ -12,6 +16,7 @@ import BarraFiltros from '../components/BarraFiltros.vue'
 import Paginador from '../components/Paginador.vue'
 import Modal from '../components/Modal.vue'
 import { fechaCorta } from '../utils'
+import { useSinGuardar } from '../composables/useSinGuardar'
 
 // Catálogo de clientes. Se llena solo al registrar visitas (el cliente nuevo se registra al guardar la visita);
 // aquí se pueden buscar, corregir sus datos, agendarles una visita y ver sus últimas visitas.
@@ -33,12 +38,20 @@ onMounted(() => C.cargar({ q: q.value.trim() }).catch(() => {}))
 const editando = ref(null)
 const form = reactive({ nombre: '', direccion: '', telefono: '' })
 
-function abrirForm(c) {
+let original = ''
+function ponerForm(c) {
   editando.value = c ? c.id : 'nuevo'
   Object.assign(form, { nombre: c?.nombre ?? '', direccion: c?.direccion ?? '', telefono: c?.telefono ?? '' })
+  original = JSON.stringify(form)
 }
+const salir = useSinGuardar(
+  () => editando.value !== null && JSON.stringify(form) !== original,
+  () => (editando.value = null),
+)
+const abrirForm = async (c) => (await salir()) && ponerForm(c)
+const cerrarForm = async () => (await salir()) && (editando.value = null)
 
-watch(() => props.solicitud, (s) => s?.tipo === 'nuevo' && abrirForm(null), { immediate: true })
+watch(() => props.solicitud, (s) => s?.tipo === 'nuevo' && ponerForm(null), { immediate: true }) // el menú ya preguntó
 
 async function guardar() {
   try {
@@ -72,66 +85,57 @@ async function alternarVisitas(c) {
 </script>
 
 <template>
-  <BarraFiltros v-model="q" placeholder="Buscar por nombre, teléfono o dirección">
-    <template #acciones>
-      <button class="btn-acento !min-h-10 !px-3 flex-none" aria-label="Nuevo cliente" @click="abrirForm(null)">
-        <Plus :size="18" aria-hidden="true" />
-        <span class="sr-only sm:not-sr-only">Nuevo</span>
-      </button>
-    </template>
-  </BarraFiltros>
+  <BarraFiltros v-model="q" placeholder="Buscar cliente" />
 
-  <p v-if="C.error.value" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ C.error.value }}</p>
+  <p v-if="C.error.value && editando === null" class="aviso-error mb-3">{{ C.error.value }}</p>
 
-  <Modal v-if="editando === 'nuevo'" titulo="Nuevo cliente" @cerrar="editando = null">
-  <form class="grid gap-3" @submit.prevent="guardar">
-    <label class="etiqueta">Nombre
-      <input v-model.trim="form.nombre" class="campo" required maxlength="120" />
-    </label>
-    <label class="etiqueta">Dirección
-      <input v-model.trim="form.direccion" class="campo" maxlength="200" />
-    </label>
-    <label class="etiqueta">Teléfono
-      <input v-model.trim="form.telefono" type="tel" inputmode="tel" class="campo" maxlength="30" />
-    </label>
-    <button class="btn" :disabled="C.cargando.value">Registrar cliente</button>
-  </form>
+  <Modal v-if="editando !== null" :titulo="editando === 'nuevo' ? 'Nuevo cliente' : 'Editar cliente'" @cerrar="cerrarForm">
+    <form @submit.prevent="guardar">
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <label class="etiqueta">Nombre
+        <input v-model.trim="form.nombre" class="campo" required maxlength="120" />
+      </label>
+      <label class="etiqueta">Dirección
+        <input v-model.trim="form.direccion" class="campo" maxlength="200" />
+      </label>
+      <label class="etiqueta">Teléfono
+        <input v-model.trim="form.telefono" type="tel" inputmode="tel" class="campo" maxlength="30" />
+      </label>
+      </div>
+      <p v-if="editando !== 'nuevo'" class="text-xs text-brand-700/80">Cambiar el nombre no modifica las visitas ya registradas.</p>
+      <PieFormulario :texto="editando === 'nuevo' ? 'Registrar cliente' : 'Guardar cambios'" :cargando="C.cargando.value" :error="C.error.value || ''" @cancelar="cerrarForm" />
+    </form>
   </Modal>
 
-  <p v-if="C.cargando.value && !C.items.value.length" class="py-10 text-center text-brand-700">Cargando…</p>
-  <p v-else-if="!C.items.value.length" class="py-10 text-center text-brand-700/70">
-    {{ q ? 'No hay clientes que coincidan.' : 'Aún no hay clientes. Se registran solos al agendar una visita.' }}
-  </p>
+  <Cargando v-if="C.cargando.value && !C.items.value.length" />
+  <Vacio v-else-if="!C.items.value.length" :icono="Building2" :texto="q ? 'No hay clientes que coincidan.' : 'Aún no hay clientes. Se registran solos al agendar una visita.'">
+    <button v-if="q" type="button" class="btn-borde min-h-11 flex-none text-sm" @click="q = ''">Borrar búsqueda</button>
+  </Vacio>
 
   <ul class="grid gap-2.5 lg:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
     <li v-for="c in C.items.value" :key="c.id" class="tarjeta grid gap-2.5">
-      <template v-if="editando !== c.id">
         <div class="flex items-start gap-3">
           <Avatar :nombre="c.nombre" />
           <div class="grid min-w-0 flex-1 gap-1">
-            <strong class="text-base leading-snug break-words text-brand-900">{{ c.nombre }}</strong>
+            <strong class="text-base leading-snug wrap-anywhere text-brand-900">{{ c.nombre }}</strong>
             <Dato v-if="c.telefono" :icono="Phone" etiqueta="Teléfono">{{ c.telefono }}</Dato>
             <Dato v-if="c.direccion" :icono="MapPin" etiqueta="Dirección" ajustar>{{ c.direccion }}</Dato>
             <p v-if="!c.telefono && !c.direccion" class="text-sm text-brand-700/60">Sin teléfono ni dirección registrados.</p>
           </div>
         </div>
-        <div class="flex flex-wrap gap-2">
-          <button class="btn min-h-10 flex-none text-sm" @click="emit('agendar', c)">
+        <div class="flex items-center gap-2">
+          <button class="btn min-h-11 text-sm" @click="emit('agendar', c)">
             <CalendarPlus :size="16" aria-hidden="true" />
             Agendar visita
           </button>
-          <button class="btn-borde min-h-10 text-sm" @click="abrirForm(c)">
-            <Pencil :size="16" aria-hidden="true" />
-            Editar
+          <button class="btn-icono sm:ml-auto" :class="{ 'bg-brand-100': abierto === c.id }" :aria-expanded="abierto === c.id" :aria-label="`Ver visitas de ${c.nombre}`" title="Ver visitas" @click="alternarVisitas(c)">
+            <History :size="18" aria-hidden="true" />
           </button>
-          <button class="btn-borde min-h-10 text-sm" :aria-expanded="abierto === c.id" @click="alternarVisitas(c)">
-            <ChevronUp v-if="abierto === c.id" :size="16" aria-hidden="true" />
-            <ChevronDown v-else :size="16" aria-hidden="true" />
-            Visitas
+          <button class="btn-icono" :aria-label="`Editar ${c.nombre}`" title="Editar" @click="abrirForm(c)">
+            <Pencil :size="18" aria-hidden="true" />
           </button>
-          <button v-if="puedeAgendar" class="btn-peligro min-h-10 text-sm" @click="eliminar(c)">
-            <Trash2 :size="16" aria-hidden="true" />
-            Eliminar
+          <button v-if="puedeAgendar" class="flex size-11 shrink-0 items-center justify-center rounded-xl text-red-700 active:bg-red-50" :aria-label="`Eliminar ${c.nombre}`" title="Eliminar" @click="eliminar(c)">
+            <Trash2 :size="18" aria-hidden="true" />
           </button>
         </div>
 
@@ -144,26 +148,9 @@ async function alternarVisitas(c) {
             </button>
           </li>
         </ul>
-      </template>
-
-      <form v-else class="grid gap-3" @submit.prevent="guardar">
-        <label class="etiqueta">Nombre
-          <input v-model.trim="form.nombre" class="campo" required maxlength="120" />
-        </label>
-        <label class="etiqueta">Dirección
-          <input v-model.trim="form.direccion" class="campo" maxlength="200" />
-        </label>
-        <label class="etiqueta">Teléfono
-          <input v-model.trim="form.telefono" type="tel" inputmode="tel" class="campo" maxlength="30" />
-        </label>
-        <p class="text-xs text-brand-700/80">Cambiar el nombre no modifica las visitas ya registradas.</p>
-        <div class="flex gap-2">
-          <button type="button" class="btn-borde min-h-11" @click="editando = null">Cancelar</button>
-          <button class="btn min-h-11" :disabled="C.cargando.value">Guardar</button>
-        </div>
-      </form>
     </li>
   </ul>
 
+  <BotonNuevo texto="Nuevo cliente" @click="abrirForm(null)" />
   <Paginador :total="C.meta.value.total" :offset="C.parametros.value.offset || 0" :limite="C.limite" :cargando="C.cargando.value" @ir="C.irAPagina($event).catch(() => {})" />
 </template>

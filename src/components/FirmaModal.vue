@@ -2,6 +2,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { Check, Eraser, PenLine } from 'lucide-vue-next'
 import Modal from './Modal.vue'
+import { useSinGuardar } from '../composables/useSinGuardar'
 
 // Ventana grande para firmar. Al aceptar entrega la firma recortada a lo dibujado, como PNG pequeño con fondo transparente.
 const props = defineProps({ inicial: { type: String, default: '' }, nombre: { type: String, default: '' } })
@@ -20,6 +21,9 @@ let caja = null // zona ocupada por el trazo: { x1, y1, x2, y2 }
 function ampliar(x, y) {
   caja = caja ? { x1: Math.min(caja.x1, x), y1: Math.min(caja.y1, y), x2: Math.max(caja.x2, x), y2: Math.max(caja.y2, y) } : { x1: x, y1: y, x2: x, y2: y }
 }
+
+const salir = useSinGuardar(() => cambiada && !vacia.value) // solo si hay trazos nuevos que se perderían
+const cerrar = async () => (await salir()) && emit('cerrar')
 
 onMounted(async () => {
   await nextTick()
@@ -94,13 +98,13 @@ function aceptar() {
 </script>
 
 <template>
-  <Modal titulo="Firma del cliente" ancho @cerrar="emit('cerrar')">
+  <Modal titulo="Firma del cliente" @cerrar="cerrar">
     <div class="grid gap-3">
       <p class="text-sm text-brand-700">{{ nombre ? `Firma de ${nombre}.` : 'Firma de quien recibe.' }} Usa el dedo o el ratón.</p>
       <div class="relative">
         <canvas
           ref="canvas"
-          class="block h-[48dvh] min-h-52 w-full cursor-crosshair touch-none rounded-xl border-2 border-dashed border-brand-300 bg-white"
+          class="block h-[60dvh] min-h-52 w-full cursor-crosshair touch-none rounded-xl border-2 border-dashed border-brand-300 bg-white"
           aria-label="Área de firma"
           @pointerdown.prevent="inicio"
           @pointermove.prevent="mover"
@@ -111,10 +115,10 @@ function aceptar() {
         <span class="pointer-events-none absolute inset-x-8 bottom-12 border-b border-brand-200" aria-hidden="true" />
         <span v-if="vacia" class="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 text-brand-400" aria-hidden="true"><PenLine :size="20" />Firme aquí</span>
       </div>
-      <div class="flex flex-wrap items-center justify-between gap-2">
+      <div class="pie-fijo !flex flex-wrap items-center justify-between">
         <button type="button" class="flex min-h-11 items-center gap-1.5 px-2 text-sm font-semibold text-brand-700 disabled:opacity-50" :disabled="vacia" @click="limpiar"><Eraser :size="16" aria-hidden="true" />Limpiar</button>
         <div class="flex w-full gap-2 whitespace-nowrap sm:w-auto">
-          <button type="button" class="btn-borde" @click="emit('cerrar')">Cancelar</button>
+          <button type="button" class="btn-borde" @click="cerrar">Cancelar</button>
           <button type="button" class="btn" :disabled="vacia" @click="aceptar"><Check :size="18" aria-hidden="true" />Usar firma</button>
         </div>
       </div>

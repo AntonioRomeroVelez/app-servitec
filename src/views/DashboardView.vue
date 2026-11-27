@@ -1,6 +1,7 @@
 <script setup>
+import Cargando from '../components/Cargando.vue'
 import { ref, computed, onMounted } from 'vue'
-import { CalendarPlus, CalendarDays, FilePlus2, Building2, TriangleAlert, RefreshCw, Wrench, Settings, ShieldCheck } from 'lucide-vue-next'
+import { MessageCircle, CalendarPlus, FilePlus2, Building2, TriangleAlert, RefreshCw, Wrench, Settings, ShieldCheck } from 'lucide-vue-next'
 import { call } from '../api'
 import { useAuth } from '../composables/useAuth'
 import { useConfiguracion } from '../composables/useConfiguracion'
@@ -24,7 +25,8 @@ async function cargar() {
   cargando.value = true
   error.value = ''
   try {
-    datos.value = await call('dashboard_resumen')
+    const mostrar = (d) => (datos.value = d)
+    mostrar(await call('dashboard_resumen', {}, { previo: mostrar }))
   } catch (e) {
     error.value = e.message
   } finally {
@@ -60,8 +62,6 @@ const tiles = computed(() => {
     { id: 'mes', texto: 'Realizadas este mes', valor: d.realizadasMes },
     { id: 'borr', texto: 'Informes en borrador', valor: d.informesBorrador, ir: () => emit('informes', 'Borrador') },
     { id: 'fin', texto: 'Finalizados este mes', valor: d.informesFinalizadosMes, ir: () => emit('informes', 'Finalizado') },
-    { id: 'cli', texto: 'Clientes', valor: d.clientes, ir: () => emit('ir', 'clientes') },
-    { id: 'tec', texto: 'Técnicos activos', valor: d.tecnicos, ir: () => emit('ir', 'usuarios') },
   ]
 })
 
@@ -98,14 +98,13 @@ const pl = computed(() => datos.value?.plataforma)
     </header>
 
     <!-- Accesos rápidos -->
-    <div v-if="!sinOperacion" class="flex flex-wrap gap-2">
-      <button v-if="puedeAgendar" class="btn min-h-10 flex-none text-sm" @click="$emit('nuevaVisita')"><CalendarPlus :size="16" aria-hidden="true" />Nueva visita</button>
-      <button class="btn-borde min-h-10 flex-none text-sm" @click="$emit('nuevoInforme')"><FilePlus2 :size="16" aria-hidden="true" />Nuevo informe</button>
-      <button class="btn-borde min-h-10 flex-none text-sm" @click="$emit('agenda', 'proximas')"><CalendarDays :size="16" aria-hidden="true" />Agenda</button>
+    <div v-if="!sinOperacion" class="flex gap-2">
+      <button v-if="puedeAgendar" class="btn min-h-11 text-sm" @click="$emit('nuevaVisita')"><CalendarPlus :size="16" aria-hidden="true" />Nueva visita</button>
+      <button class="min-h-11 text-sm" :class="puedeAgendar ? 'btn-borde' : 'btn'" @click="$emit('nuevoInforme')"><FilePlus2 :size="16" aria-hidden="true" />Nuevo informe</button>
     </div>
 
-    <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
-    <p v-else-if="!datos" class="py-10 text-center text-brand-700">Cargando…</p>
+    <p v-if="error" class="aviso-error">{{ error }}</p>
+    <Cargando v-else-if="!datos" />
 
     <template v-else>
       <template v-if="!sinOperacion">
@@ -115,12 +114,53 @@ const pl = computed(() => datos.value?.plataforma)
         {{ datos.atrasadas }} {{ datos.atrasadas === 1 ? 'visita atrasada' : 'visitas atrasadas' }}: la fecha ya pasó y siguen sin cerrarse. Revisar.
       </button>
 
+      <div class="grid gap-4 md:grid-cols-2">
+        <!-- Próximas visitas -->
+        <div class="tarjeta grid content-start gap-2">
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-brand-800">{{ puedeAgendar ? 'Próximas visitas' : 'Mis próximas visitas' }}</h3>
+            <button class="enlace" @click="$emit('agenda', 'proximas')">Ver agenda</button>
+          </div>
+          <p v-if="!datos.proximasLista.length" class="py-3 text-sm text-brand-700/70">No hay visitas pendientes.</p>
+          <ul v-else class="grid gap-2">
+            <li v-for="v in datos.proximasLista" :key="v.id">
+              <button class="flex w-full items-center gap-3 rounded-xl border-l-4 bg-brand-50/70 px-3 py-2 text-left active:bg-brand-100" :class="bordeDeEstado(v.estado)" @click="$emit('visita', v.id)">
+                <span class="w-14 shrink-0 text-xs leading-tight text-brand-700"><b class="block text-base text-brand-900">{{ v.hora.slice(0, 5) }}</b>{{ etiquetaDia(v.fecha) }}</span>
+                <span class="grid min-w-0 flex-1 gap-0.5"><b class="line-clamp-2 text-sm wrap-anywhere text-brand-900">{{ v.cliente }}</b><Dato :icono="Wrench" etiqueta="Tipo">{{ v.tipo }}</Dato></span>
+                <EstadoBadge :estado="v.estado" />
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Últimos informes -->
+        <div class="tarjeta grid content-start gap-2">
+          <div class="flex items-center justify-between">
+            <h3 class="font-semibold text-brand-800">{{ puedeAgendar ? 'Últimos informes' : 'Mis últimos informes' }}</h3>
+            <button class="enlace" @click="$emit('informes', '')">Ver todos</button>
+          </div>
+          <p v-if="!datos.ultimosInformes.length" class="py-3 text-sm text-brand-700/70">Todavía no hay informes.</p>
+          <ul v-else class="grid gap-2">
+            <li v-for="i in datos.ultimosInformes" :key="i.id">
+              <button class="flex w-full items-center gap-3 rounded-xl border-l-4 bg-brand-50/70 px-3 py-2 text-left active:bg-brand-100" :class="bordeDeEstado(i.estado)" @click="$emit('informe', i.id)">
+                <span class="grid min-w-0 flex-1 gap-0.5">
+                  <span class="font-mono text-[11px] font-semibold text-brand-600">{{ i.numero || 'Sin número' }}</span>
+                  <b class="line-clamp-2 text-sm wrap-anywhere text-brand-900">{{ i.titulo }}</b>
+                  <Dato :icono="Building2" etiqueta="Cliente">{{ i.cliente }}</Dato>
+                </span>
+                <EstadoBadge :estado="i.estado" />
+              </button>
+            </li>
+          </ul>
+        </div>
+      </div>
+
       <!-- Cifras -->
-      <ul class="grid grid-cols-2 gap-2.5 sm:grid-cols-4 xl:grid-cols-8">
+      <ul class="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-6">
         <li v-for="t in tiles" :key="t.id">
-          <component :is="t.ir ? 'button' : 'div'" class="tarjeta grid h-full w-full gap-0.5 text-left" :class="t.ir ? 'active:bg-brand-50' : ''" @click="t.ir && t.ir()">
-            <span class="text-xs text-brand-700">{{ t.texto }}</span>
+          <component :is="t.ir ? 'button' : 'div'" class="tarjeta flex h-full w-full items-center gap-2.5 !px-3 !py-2.5 text-left" :class="t.ir ? 'active:bg-brand-50' : ''" @click="t.ir && t.ir()">
             <span class="text-2xl leading-tight font-bold" :class="t.alerta ? 'text-amber-700' : 'text-brand-900'">{{ t.valor }}</span>
+            <span class="min-w-0 text-xs leading-tight text-brand-700">{{ t.texto }}</span>
           </component>
         </li>
       </ul>
@@ -133,48 +173,6 @@ const pl = computed(() => datos.value?.plataforma)
         </div>
         <GraficoBarras :datos="barras" unidad="visitas" />
       </div>
-
-      <div class="grid gap-4 md:grid-cols-2">
-        <!-- Próximas visitas -->
-        <div class="tarjeta grid content-start gap-2">
-          <div class="flex items-center justify-between">
-            <h3 class="font-semibold text-brand-800">{{ puedeAgendar ? 'Próximas visitas' : 'Mis próximas visitas' }}</h3>
-            <button class="text-xs font-semibold text-brand-700 underline" @click="$emit('agenda', 'proximas')">Ver agenda</button>
-          </div>
-          <p v-if="!datos.proximasLista.length" class="py-3 text-sm text-brand-700/70">No hay visitas pendientes.</p>
-          <ul v-else class="grid gap-2">
-            <li v-for="v in datos.proximasLista" :key="v.id">
-              <button class="flex w-full items-center gap-3 rounded-xl border-l-4 bg-brand-50/70 px-3 py-2 text-left active:bg-brand-100" :class="bordeDeEstado(v.estado)" @click="$emit('visita', v.id)">
-                <span class="w-14 shrink-0 text-xs leading-tight text-brand-700"><b class="block text-base text-brand-900">{{ v.hora.slice(0, 5) }}</b>{{ etiquetaDia(v.fecha) }}</span>
-                <span class="grid min-w-0 flex-1 gap-0.5"><b class="truncate text-sm text-brand-900">{{ v.cliente }}</b><Dato :icono="Wrench" etiqueta="Tipo">{{ v.tipo }}</Dato></span>
-                <EstadoBadge :estado="v.estado" />
-              </button>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Últimos informes -->
-        <div class="tarjeta grid content-start gap-2">
-          <div class="flex items-center justify-between">
-            <h3 class="font-semibold text-brand-800">{{ puedeAgendar ? 'Últimos informes' : 'Mis últimos informes' }}</h3>
-            <button class="text-xs font-semibold text-brand-700 underline" @click="$emit('informes', '')">Ver todos</button>
-          </div>
-          <p v-if="!datos.ultimosInformes.length" class="py-3 text-sm text-brand-700/70">Todavía no hay informes.</p>
-          <ul v-else class="grid gap-2">
-            <li v-for="i in datos.ultimosInformes" :key="i.id">
-              <button class="flex w-full items-center gap-3 rounded-xl border-l-4 bg-brand-50/70 px-3 py-2 text-left active:bg-brand-100" :class="bordeDeEstado(i.estado)" @click="$emit('informe', i.id)">
-                <span class="grid min-w-0 flex-1 gap-0.5">
-                  <span class="font-mono text-[11px] font-semibold text-brand-600">{{ i.numero || 'Sin número' }}</span>
-                  <b class="truncate text-sm text-brand-900">{{ i.titulo }}</b>
-                  <Dato :icono="Building2" etiqueta="Cliente">{{ i.cliente }}</Dato>
-                </span>
-                <EstadoBadge :estado="i.estado" />
-              </button>
-            </li>
-          </ul>
-        </div>
-      </div>
-
       </template>
 
       <!-- Superadministrador: solo personaliza la empresa y gestiona a sus administradores -->
@@ -182,8 +180,9 @@ const pl = computed(() => datos.value?.plataforma)
         <h3 class="font-semibold text-brand-800">Tu empresa</h3>
         <p class="text-sm text-brand-700">Personaliza sus datos, logo, colores e informes, y crea la cuenta de su administrador.</p>
         <div class="flex flex-wrap gap-2">
-          <button class="btn min-h-10 flex-none text-sm" @click="$emit('ir', 'ajustes')"><Settings :size="16" aria-hidden="true" />Personalizar la empresa</button>
-          <button class="btn-borde min-h-10 flex-none text-sm" @click="$emit('ir', 'usuarios')"><ShieldCheck :size="16" aria-hidden="true" />Administradores</button>
+          <button class="btn min-h-11 flex-none text-sm" @click="$emit('ir', 'ajustes')"><Settings :size="16" aria-hidden="true" />Personalizar la empresa</button>
+          <button class="btn-borde min-h-11 flex-none text-sm" @click="$emit('ir', 'usuarios')"><ShieldCheck :size="16" aria-hidden="true" />Administradores</button>
+          <button class="btn-borde min-h-11 flex-none text-sm" @click="$emit('ir', 'whatsapp')"><MessageCircle :size="16" aria-hidden="true" />Mensajes de WhatsApp</button>
         </div>
       </div>
 
@@ -191,7 +190,7 @@ const pl = computed(() => datos.value?.plataforma)
       <div v-if="esPlataforma && pl" class="tarjeta grid gap-2">
         <div class="flex items-center justify-between">
           <h3 class="flex items-center gap-2 font-semibold text-brand-800"><Building2 :size="18" aria-hidden="true" />Plataforma</h3>
-          <button class="text-xs font-semibold text-brand-700 underline" @click="$emit('ir', 'empresas')">Administrar empresas</button>
+          <button class="enlace" @click="$emit('ir', 'empresas')">Administrar empresas</button>
         </div>
         <ul class="grid grid-cols-2 gap-2 sm:grid-cols-4">
           <li class="rounded-xl bg-brand-50 p-2.5"><span class="block text-xs text-brand-700">Empresas</span><b class="text-xl text-brand-900">{{ pl.empresas }}</b></li>

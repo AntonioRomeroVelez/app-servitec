@@ -62,14 +62,14 @@ function alTeclear(e) {
         @keydown="alTeclear"
       >
         <!-- Cabecera: marca y usuario -->
-        <div class="bg-encabezado px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-4 text-white">
+        <div class="bg-encabezado px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 text-white">
           <div class="flex items-start justify-between gap-2">
             <MarcaEmpresa class="text-left" />
             <button class="-mt-1 -mr-2 flex size-10 items-center justify-center rounded-full active:bg-white/10" aria-label="Cerrar menú" @click="emit('cerrar')">
               <X :size="22" aria-hidden="true" />
             </button>
           </div>
-          <div class="mt-3 flex items-center gap-3">
+          <div class="mt-2 flex items-center gap-3">
             <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-white/20 text-base font-bold">{{ (usuario.nombre || usuario.usuario).charAt(0).toUpperCase() }}</span>
             <div class="min-w-0">
               <p class="truncate text-sm font-semibold">{{ usuario.nombre }}</p>

@@ -70,6 +70,6 @@ const servidor = http.createServer((req, res) => {
 servidor.listen(PUERTO, '127.0.0.1', () => {
   console.log(`Simulador de Apps Script escuchando en http://127.0.0.1:${PUERTO}`)
   console.log('Usuarios (clave de todos: Clave-Definitiva-77): lucia (admin), marta (admin), carlos (técnico), diego (técnico)')
-  console.log('Root: superadmin / Nueva-Root-2026  |  Superadmin de la empresa: servitec / Nueva-Super-2026')
+  console.log('Root: superadmin / Nueva-Root-2026  |  Superadmin de la empresa: servitec / Nueva-Soporte-2026  |  Propietario: dueno / Nueva-Super-2026')
   console.log('Cortar la red: GET /__red?estado=off  |  Restablecerla: GET /__red?estado=on')
 })

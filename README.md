@@ -109,9 +109,9 @@ Cada sección tiene su botón de **valores de fábrica**. Notas:
 
 **En computadora** todas las vistas usan el ancho completo y las listas se reparten en columnas.
 
-**Cómo se ven los Ajustes.** El menú **Personalizar la empresa** abre una portada con una tarjeta por sección; cada una tiene su pantalla y avisa si sales sin guardar. **Ver un informe de ejemplo (PDF)** muestra el resultado con lo que se está editando, aunque no se haya guardado.
+**Cómo se ven los Ajustes.** El menú **Personalizar la empresa** tiene arriba una barra con las secciones (**Resumen**, **Empresa**, **Colores**, **Informes**, **Tipos** y **WhatsApp**) para pasar de una a otra. Lo escrito se conserva al cambiar de sección, un punto marca la que está sin guardar y la app avisa si sales de Ajustes sin guardar. **Ver informe de ejemplo (PDF)** abre una ventana con el resultado de lo que se está editando, aunque no se haya guardado; desde ahí se puede descargar. En los celulares sin visor de PDF integrado se ofrece abrirlo o descargarlo.
 
-**Marca en la pantalla de ingreso.** Se ven el logo y los colores de la empresa en los dispositivos que ya ingresaron alguna vez, y en los que abren el enlace o el código QR de **Instalar la app** (lleva `?empresa=...`). Un dispositivo nuevo que entra por la dirección simple ve la marca general hasta su primer ingreso. Sin sesión solo se entregan los datos de la empresa, sus colores y su logo.
+**Marca en la pantalla de ingreso.** Se ven el logo y los colores de la empresa en los dispositivos que ya ingresaron alguna vez, y en los que abren el enlace o el código QR de instalación (**Mi cuenta → Código QR para instalar**) (lleva `?empresa=...`). Un dispositivo nuevo que entra por la dirección simple ve la marca general hasta su primer ingreso. Sin sesión solo se entregan los datos de la empresa, sus colores y su logo.
 
 ## Clientes
 
@@ -120,6 +120,35 @@ Al registrar una visita, el cliente se registra solo en la hoja `Clientes` (nomb
 - **Al agendar una visita**, el campo Cliente sugiere los clientes ya registrados mientras se escribe; al elegir uno se completan su dirección y teléfono, y la app avisa si es un cliente registrado o uno nuevo que se registrará al guardar.
 - **Pantalla Clientes** (admin y superadmin): búsqueda por nombre, teléfono o dirección; alta manual; edición; botón **Agendar visita** que abre el formulario con los datos del cliente; y sus últimas visitas. Cambiar el nombre de un cliente no reescribe las visitas ya registradas. Solo el superadmin elimina, y solo clientes sin visitas. Los técnicos no ven el catálogo.
 - Si ya tenías visitas antes de existir el catálogo, ejecuta una vez `registrarClientesExistentes` desde el editor de Apps Script: registra sus clientes y las vincula.
+
+## WhatsApp
+
+La app prepara el mensaje de una visita y lo abre en el WhatsApp de quien envía (enlace `wa.me`), que es quien pulsa enviar. No usa la API de Meta ni necesita claves; por eso el historial dice **Preparado** o **Fallido**, nunca «Enviado».
+
+| Quién | Qué puede hacer |
+| --- | --- |
+| Superadministrador (menú **Personalizar la empresa → Mensajes de WhatsApp**) | Crear, editar, duplicar, activar y eliminar mensajes (plantillas); elegir cuál está **En uso** para cada tipo; activar o desactivar el envío; código de país y formato de fecha y hora |
+| Administrador | Marcar **Enviar confirmación por WhatsApp** al crear una visita, enviar desde el detalle de la visita y, en el menú **WhatsApp**, ver los mensajes (solo consulta) y el historial |
+| Técnico y root | Nada |
+
+**Editor de mensajes.** El mensaje se arma **por bloques** (subir, bajar, duplicar, quitar y agregar partes listas) o como **texto completo**, con negrita, cursiva, tachado, ancho fijo, listas, citas, datos de la visita, emojis y modelos de partida. La **vista previa** se actualiza mientras se escribe y permite ver cómo queda sin la descripción ni el técnico.
+
+- Mientras la empresa no ponga otro en uso se usa el **mensaje de fábrica**; **Cambiar el texto** crea una copia propia. Si el servidor no entrega las plantillas (por ejemplo, un `Code.gs` sin actualizar), la pantalla muestra el de fábrica solo para verlo.
+- Las variables (`{{cliente_nombre}}`, `{{fecha_cita}}`…) se reemplazan con los datos reales. Si todas las de una línea están vacías, la línea no aparece. La descripción del servicio es opcional y se escribe al enviar.
+- El teléfono sale de la visita o, si no tiene, del cliente. En Ecuador deben ser celulares (`0991234567`).
+- Las plantillas y el historial se guardan en las hojas `Plantillas WhatsApp` y `Envíos WhatsApp` de cada empresa, que se crean solas.
+- Enviar necesita conexión. Una visita creada sin conexión queda en cola y el mensaje se envía después desde su detalle.
+
+Al actualizar: pega el `Code.gs` nuevo en el script y crea una **nueva versión** de la implementación.
+
+## Ubicación en el mapa
+
+Al crear o editar una visita, **Ubicar en el mapa** permite buscar la dirección, tocar el mapa, arrastrar el marcador o usar la ubicación del dispositivo. La dirección se completa sola (se puede corregir) y el punto queda en la columna `ubicacion` de `Visitas` como `latitud,longitud`. **Cómo llegar** abre Google Maps en ese punto; sin punto, busca la dirección escrita.
+
+- El mapa y las direcciones son de OpenStreetMap (librería Leaflet): gratis y sin clave. Al usarlo, el texto buscado y las coordenadas se envían a sus servidores; no se envía el nombre del cliente. Su buscador admite poco volumen (una consulta por segundo) y busca solo en Ecuador.
+- Las direcciones pueden ser menos precisas que las de Google: el punto es lo que guía al técnico.
+- «Mi ubicación» necesita HTTPS (o `localhost`) y permiso del navegador. El mapa necesita conexión; la visita se puede guardar sin él.
+- La columna se agrega sola a las hojas ya creadas la primera vez que se guarda una visita. Requiere publicar el `Code.gs` nuevo.
 
 ## Bitácora y formato de fechas
 
@@ -222,7 +251,7 @@ Son 168 pruebas: login, bloqueo y cambio obligatorio de clave, permisos por rol,
 - **Número correlativo** por año (`INF-2026-0001`), asignado por el backend.
 - **Actividades realizadas** (`src/plantillas.js`): un informe nuevo empieza con dos casillas vacías (con un ejemplo del tipo de visita como texto de ayuda); el técnico escribe lo que hizo, agrega las que necesite o las quita, y marca cada una como Cumple / No cumple / Falla. Se guardan como JSON en la columna `checklist`.
 - **Firma del cliente** (se abre en una ventana grande para firmar con el dedo o el ratón; se guarda como PNG pequeño) y nombre de quien recibe.
-- **Finalizado = cerrado:** para finalizar, cada actividad necesita descripción y resultado. Después solo un administrador puede editarlo o eliminarlo (se valida en `Code.gs`).
+- **Finalizado = cerrado:** para finalizar hace falta al menos una actividad, y cada una necesita descripción y resultado. Después solo un administrador puede editarlo o eliminarlo (se valida en `Code.gs`).
 - **PDF:** el botón "Descargar PDF" genera y descarga un archivo A4 (`INF-0001.pdf`) con el logo y los datos de la empresa como encabezado, checklist, observaciones, fotos de la visita, firma del cliente y pie con numeración de páginas. Lo que incluye se elige en Ajustes > Informes.
 
 ## Fotos de las visitas

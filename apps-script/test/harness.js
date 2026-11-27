@@ -208,6 +208,7 @@ export function crearEntorno() {
     Utilities: {
       getUuid: () => crypto.randomUUID(),
       DigestAlgorithm: { SHA_256: 'SHA_256' },
+      Charset: { UTF_8: 'UTF_8' },
       computeDigest: (_alg, v) => aSigned(crypto.createHash('sha256').update(typeof v === 'string' ? Buffer.from(v, 'utf8') : aBuffer(v)).digest()),
       newBlob: (datos, mime, nombre) => ({ nombre, mime, getBytes: () => (typeof datos === 'string' ? aSigned(Buffer.from(datos, 'utf8')) : datos) }),
       base64Decode: (s) => aSigned(Buffer.from(s, 'base64')),

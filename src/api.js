@@ -2,10 +2,13 @@
 import { validarClave, normalizar, generarUsuario, usuarioValido, hoy as hoyIso, haceDias } from './utils'
 import { validarPersona, limpiarPersona } from './persona'
 import { combinar } from './configuracion'
+import { whatsappDemo } from './whatsappDemo'
+import { leerUbicacion } from './mapa'
 import { valorSeccion, SECCIONES } from './validarConfig'
 import { crearCapaOffline } from './offline/capa.js'
 import { iniciarConexion } from './offline/conexion.js'
 import { estado } from './offline/estado.js'
+import { empezarCarga } from './carga.js'
 import { crearTransporte } from './supabase/transporte.js'
 
 // Prioridad: Supabase (SaaS) > Google Apps Script (heredado) > modo demo (localStorage)
@@ -86,14 +89,19 @@ export const iniciarSincronizacion = (opciones) => (offline ? iniciarConexion(of
 /** Al cerrar sesión: borra las copias de lectura (pueden ser datos de clientes). Los cambios pendientes se conservan. */
 export const limpiarDatosLocales = () => offline?.limpiarLecturas()
 
-export async function call(action, payload = {}) {
+// `opciones.previo(datos)`: recibe la copia guardada mientras llega la respuesta (solo lecturas, con conexión real)
+export async function call(action, payload = {}, opciones) {
+  // Las consultas de fondo (contador de avisos cada minuto) no muestran el indicador de carga
+  const terminar = action === 'logout' || payload.resumen ? () => {} : empezarCarga()
   try {
     if (modoDemo) return await demo(action, payload, tokenActual())
-    return await offline.call(action, payload)
+    return await offline.call(action, payload, opciones)
   } catch (e) {
     if (e.code === 'AUTH' && action !== 'login') onAuthError()
     if (e.code === 'CAMBIAR_CLAVE') onClaveObligatoria()
     throw e
+  } finally {
+    terminar()
   }
 }
 
@@ -156,7 +164,14 @@ const ESTADOS_VISITA = ['Programada', 'Aceptada', 'En curso', 'Realizada', 'Canc
 const TRANSICIONES_TECNICO = { Programada: ['Aceptada', 'Cancelada'], Aceptada: ['En curso', 'Cancelada'], 'En curso': ['Realizada', 'Cancelada'] }
 const ESTADOS_CON_INFORME = ['Aceptada', 'En curso', 'Realizada']
 
-const checklistCompleta = (texto) => !texto || JSON.parse(texto).every((i) => String(i.item || '').trim() && i.resultado)
+// Igual que en Code.gs: para finalizar, al menos una actividad y cada una con su descripción y su resultado
+const actividadesDe = (texto) => JSON.parse(texto || '[]')
+
+function exigirChecklistCompleta(texto) {
+  const c = actividadesDe(texto)
+  if (!c.length) throw error('Para finalizar, agrega al menos una actividad')
+  if (!c.every((i) => String(i.item || '').trim() && i.resultado)) throw error('Para finalizar, cada actividad necesita su descripción y su resultado')
+}
 
 function siguienteNumero(informes) {
   const prefijo = `${configDemo().informes.prefijo}-${new Date().getFullYear()}-`
@@ -333,6 +348,19 @@ async function demo(action, p, token) {
     }
   }
 
+  if (action.startsWith('whatsapp_')) {
+    return whatsappDemo(action.slice('whatsapp_'.length), p, {
+      yo,
+      error,
+      leer,
+      escribir,
+      config: configDemo(),
+      usuarios: us,
+      visitas: leer(RECURSOS.visitas, []),
+      clientes: leer(LS_C, []),
+    })
+  }
+
   if (action.startsWith('clientes_')) {
     if (yo.rol === 'tecnico') throw error('Sin permisos', 'FORBIDDEN')
     const cs = leer(LS_C, [])
@@ -386,6 +414,7 @@ async function demo(action, p, token) {
 
     if (op === 'create') {
       if (nombre === 'visitas') validarResponsable(p.data.responsable, us)
+      if (nombre === 'visitas' && p.data.ubicacion && !leerUbicacion(p.data.ubicacion)) throw error('La ubicación del mapa no es válida')
       if (nombre === 'informes' && p.data.visitaId) {
         const v = visitas.find((x) => x.id === p.data.visitaId)
         if (!v || !puedeVer('visitas', v, yo)) throw error('Visita no encontrada')
@@ -393,7 +422,7 @@ async function demo(action, p, token) {
       }
       const item = { ...p.data, id: p.data.id || crypto.randomUUID(), autor: yo.usuario, creado: ahora, actualizado: ahora }
       if (nombre === 'informes') {
-        if (item.estado === 'Finalizado' && !checklistCompleta(item.checklist)) throw error('Para finalizar, cada actividad necesita su descripción y su resultado')
+        if (item.estado === 'Finalizado') exigirChecklistCompleta(item.checklist)
         item.numero = siguienteNumero(lista)
       }
       if (nombre === 'visitas') item.clienteId = asegurarClienteDemo(item, yo.usuario) // el cliente queda registrado
@@ -422,6 +451,7 @@ async function demo(action, p, token) {
         if (estadoFinal === 'Cancelada' && !String(motivoFinal || '').trim()) throw error('Indica el motivo de la cancelación')
       }
       if (nombre === 'visitas' && d.responsable !== undefined && d.responsable !== lista[i].responsable) validarResponsable(d.responsable, us)
+      if (nombre === 'visitas' && d.ubicacion && !leerUbicacion(d.ubicacion)) throw error('La ubicación del mapa no es válida')
       if (nombre === 'informes') {
         delete d.visitaId
         delete d.numero
@@ -432,7 +462,10 @@ async function demo(action, p, token) {
       if (nombre === 'visitas' && yo.rol !== 'tecnico' && (!lista[i].clienteId || normalizar(lista[i].cliente) !== normalizar(previo.cliente))) {
         lista[i].clienteId = asegurarClienteDemo(lista[i], yo.usuario)
       }
-      if (nombre === 'informes' && lista[i].estado === 'Finalizado' && !checklistCompleta(lista[i].checklist)) throw error('Para finalizar, cada actividad necesita su descripción y su resultado')
+      if (nombre === 'informes' && lista[i].estado === 'Finalizado') {
+        const antiguoSinActividades = previo.estado === 'Finalizado' && !actividadesDe(previo.checklist).length && !actividadesDe(lista[i].checklist).length
+        if (!antiguoSinActividades) exigirChecklistCompleta(lista[i].checklist)
+      }
       escribir(key, lista)
       if (nombre === 'visitas' && previo.estado !== lista[i].estado && yo.rol === 'tecnico') {
         const rechazo = lista[i].estado === 'Cancelada' && previo.estado === 'Programada'

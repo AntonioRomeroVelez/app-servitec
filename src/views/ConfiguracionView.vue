@@ -1,18 +1,21 @@
 <script setup>
 import { reactive, ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { Building2, Palette, FileText, ListChecks, ImagePlus, Trash2, RotateCcw, Save, ArrowUp, ArrowDown, Plus, Check, ChevronDown, ChevronUp, ChevronRight, ArrowLeft, FileDown, Loader, CircleAlert, Wand2 } from 'lucide-vue-next'
+import { Building2, Palette, FileText, ListChecks, ImagePlus, Trash2, RotateCcw, Save, ArrowUp, ArrowDown, Plus, Check, ChevronDown, ChevronUp, ChevronRight, LayoutGrid, MessageCircle, FileDown, Loader, CircleAlert, Wand2 } from 'lucide-vue-next'
 import { useToast } from '../composables/useToast'
 import { confirmar } from '../composables/useConfirmar'
+import { useSinGuardar } from '../composables/useSinGuardar'
 import { useConfiguracion } from '../composables/useConfiguracion'
 import { TEMAS_PREDEFINIDOS, contraste } from '../tema'
 import { procesarLogo, procesarFondo } from '../imagen'
 import { coloresDeLogo } from '../colores'
 import VistaPreviaMarca from '../components/VistaPreviaMarca.vue'
+import WhatsappView from './WhatsappView.vue'
 import { clonar } from '../configuracion'
-import { descargarEjemplo } from '../informeEjemplo'
+import { generarEjemplo } from '../informeEjemplo'
+import VistaPdf from '../components/VistaPdf.vue'
 
-// Ajustes de la empresa (solo su superadministrador): una portada con una tarjeta por sección y cada sección en su propia
-// pantalla. Cada una se guarda por separado y se aplica a todos los usuarios de la empresa.
+// Ajustes de la empresa (solo su superadministrador): una barra con las secciones, un resumen con una tarjeta por sección y
+// cada sección en su propia pantalla. Cada una se guarda por separado y se aplica a todos los usuarios de la empresa.
 const props = defineProps({ solicitud: Object }) // desde el menú: { seccion } abre esa sección ('portada' = inicio)
 const C = useConfiguracion()
 const toast = useToast()
@@ -34,12 +37,14 @@ const informes = reactive({})
 const tipos = ref([])
 const nuevas = reactive({ logo: '', logoClaro: '', fondoImagen: '' }) // imágenes elegidas y reducidas, todavía sin guardar
 
-// Copia de trabajo = lo guardado (se vuelve a llenar tras guardar o restablecer)
-function cargarCopias() {
-  Object.assign(empresa, clonar(cfg.value.empresa))
-  Object.assign(tema, clonar(cfg.value.tema))
-  Object.assign(informes, clonar(cfg.value.informes))
-  tipos.value = clonar(cfg.value.tipos)
+// Copia de trabajo = lo guardado. Tras guardar o restablecer se vuelve a llenar solo esa sección: lo escrito en las
+// demás sigue ahí. Sin `seccion` se llenan todas.
+function cargarCopias(seccion) {
+  const es = (s) => !seccion || seccion === s
+  if (es('empresa')) Object.assign(empresa, clonar(cfg.value.empresa))
+  if (es('tema')) Object.assign(tema, clonar(cfg.value.tema))
+  if (es('informes')) Object.assign(informes, clonar(cfg.value.informes))
+  if (es('tipos')) tipos.value = clonar(cfg.value.tipos)
 }
 cargarCopias()
 
@@ -52,7 +57,7 @@ async function ejecutar(seccion, accion, exito) {
   guardando.value = seccion
   try {
     await accion()
-    cargarCopias()
+    cargarCopias(seccion)
     mostrar(seccion, exito)
   } catch (e) {
     mostrar(seccion, e.message, true)
@@ -147,37 +152,48 @@ const abiertoTipo = ref(null)
 
 // ---------- Portada y navegación entre secciones ----------
 const SECCIONES = [
-  { id: 'empresa', titulo: 'Datos de la empresa', icono: Building2, resumen: () => [cfg.value.empresa.nombre, cfg.value.empresa.telefono].filter(Boolean).join(' · ') },
-  { id: 'tema', titulo: 'Colores y logo', icono: Palette, resumen: () => (cfg.value.logo ? 'Con logo' : 'Sin logo') },
-  { id: 'informes', titulo: 'Informes', icono: FileText, resumen: () => `Número ${cfg.value.informes.prefijo}` },
-  { id: 'tipos', titulo: 'Tipos de visita y checklists', icono: ListChecks, resumen: () => `${cfg.value.tipos.length} ${cfg.value.tipos.length === 1 ? 'tipo' : 'tipos'}` },
+  { id: 'empresa', titulo: 'Datos de la empresa', corto: 'Empresa', icono: Building2, resumen: () => [cfg.value.empresa.nombre, cfg.value.empresa.telefono].filter(Boolean).join(' · ') },
+  { id: 'tema', titulo: 'Colores y logo', corto: 'Colores', icono: Palette, resumen: () => (cfg.value.logo ? 'Con logo' : 'Sin logo') },
+  { id: 'informes', titulo: 'Informes', corto: 'Informes', icono: FileText, resumen: () => `Número ${cfg.value.informes.prefijo}` },
+  { id: 'tipos', titulo: 'Tipos de visita y checklists', corto: 'Tipos', icono: ListChecks, resumen: () => `${cfg.value.tipos.length} ${cfg.value.tipos.length === 1 ? 'tipo' : 'tipos'}` },
+  { id: 'whatsapp', titulo: 'Mensajes de WhatsApp', corto: 'WhatsApp', icono: MessageCircle, resumen: () => (cfg.value.whatsapp.activo ? 'Envío activado' : 'Envío desactivado') },
 ]
 const actual = computed(() => SECCIONES.find((s) => s.id === abierta.value))
+// La sección de WhatsApp se carga al abrirla por primera vez y luego solo se oculta, para no perder lo escrito
+const whatsapp = ref(null)
+const verWhatsapp = ref(false)
+watch(abierta, (s) => s === 'whatsapp' && (verWhatsapp.value = true), { immediate: true })
+const PESTANAS = [{ id: '', corto: 'Resumen', icono: LayoutGrid }, ...SECCIONES]
 const distinto = (a, b) => JSON.stringify(a) !== JSON.stringify(b)
-const sinGuardar = () =>
-  distinto({ ...empresa }, cfg.value.empresa) || distinto({ ...tema }, cfg.value.tema) || distinto({ ...informes }, cfg.value.informes) || distinto(tipos.value, cfg.value.tipos) || Object.values(nuevas).some(Boolean)
+const cambios = {
+  empresa: () => distinto({ ...empresa }, cfg.value.empresa),
+  tema: () => distinto({ ...tema }, cfg.value.tema) || Object.values(nuevas).some(Boolean),
+  informes: () => distinto({ ...informes }, cfg.value.informes),
+  tipos: () => distinto(tipos.value, cfg.value.tipos),
+  whatsapp: () => !!whatsapp.value?.cambiado(), // guarda y descarta sus ajustes ella misma
+}
+const cambiada = (id) => !!cambios[id]?.()
+const sinGuardar = () => Object.keys(cambios).some(cambiada)
+
+function descartar() {
+  cargarCopias()
+  Object.assign(nuevas, { logo: '', logoClaro: '', fondoImagen: '' })
+  C.cancelarVistaPrevia()
+}
+useSinGuardar(sinGuardar, descartar) // salir de Ajustes por el menú también pregunta
 
 function entrar(id) {
   abierta.value = id
   window.scrollTo(0, 0)
 }
-async function volver() {
-  if (sinGuardar()) {
-    if (!(await confirmar({ titulo: '¿Salir sin guardar?', texto: 'Los cambios de esta sección se descartan.', confirmar: 'Descartar', peligro: true }))) return
-    cargarCopias()
-    Object.assign(nuevas, { logo: '', logoClaro: '', fondoImagen: '' })
-    C.cancelarVistaPrevia()
-  }
-  entrar('')
-}
 
 // ---------- Vista previa del informe (con lo que se está editando) ----------
 const preparando = ref(false)
+const ejemplo = ref(null) // PDF generado que se está mirando
 async function verEjemplo() {
   preparando.value = true
   try {
-    await descargarEjemplo({ empresa, tema: coloresValidos.value ? tema : cfg.value.tema, informes, tipos: tipos.value }, nuevas.logo || logoActual.value)
-    toast.exito('Informe de ejemplo descargado.')
+    ejemplo.value = await generarEjemplo({ empresa, tema: coloresValidos.value ? tema : cfg.value.tema, informes, tipos: tipos.value }, nuevas.logo || logoActual.value)
   } catch (e) {
     toast.error(e.message || 'No se pudo generar el ejemplo')
   } finally {
@@ -188,7 +204,16 @@ async function verEjemplo() {
 
 <template>
   <div class="grid gap-3">
-    <!-- Portada -->
+    <!-- Secciones siempre a la vista: se pasa de una a otra con un toque, sin tener que volver atrás -->
+    <nav class="grid grid-cols-3 gap-1 rounded-2xl border border-brand-100 bg-white p-1 shadow-sm sm:flex" aria-label="Secciones de ajustes">
+      <button v-for="s in PESTANAS" :key="s.id" type="button" class="relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-semibold sm:min-h-11 sm:flex-row sm:gap-2 sm:px-4 sm:text-sm" :class="abierta === s.id ? 'bg-brand-600 text-white' : 'text-brand-700 hover:bg-brand-50 active:bg-brand-100'" :aria-current="abierta === s.id ? 'page' : undefined" @click="entrar(s.id)">
+        <component :is="s.icono" :size="18" class="shrink-0" aria-hidden="true" />
+        <span class="max-w-full truncate">{{ s.corto }}</span>
+        <span v-if="cambiada(s.id)" class="absolute top-1.5 right-1.5 size-2.5 rounded-full border border-white bg-amber-500 sm:static"><span class="sr-only">Sin guardar</span></span>
+      </button>
+    </nav>
+
+    <!-- Resumen -->
     <template v-if="!abierta">
       <p class="text-sm text-brand-700">Todo lo que cambies aquí lo verán los usuarios de la empresa.</p>
       <ul class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -210,16 +235,18 @@ async function verEjemplo() {
       </ul>
     </template>
 
-    <div v-else class="flex items-center gap-2">
-      <button type="button" class="btn-borde min-h-10 flex-none text-sm" @click="volver"><ArrowLeft :size="18" aria-hidden="true" />Ajustes</button>
-      <h2 class="min-w-0 truncate font-semibold text-brand-900">{{ actual?.titulo }}</h2>
+    <div v-if="actual" class="flex flex-wrap items-center justify-between gap-2">
+      <h2 class="text-lg font-bold text-brand-900">{{ actual.titulo }}</h2>
+      <button v-if="abierta !== 'tipos' && abierta !== 'whatsapp'" type="button" class="btn-borde min-h-11 flex-none text-sm" :disabled="preparando" @click="verEjemplo">
+        <Loader v-if="preparando" :size="18" class="animate-spin" aria-hidden="true" />
+        <FileDown v-else :size="18" aria-hidden="true" />
+        Ver informe de ejemplo (PDF)
+      </button>
     </div>
 
-    <button v-if="abierta !== 'tipos'" type="button" class="btn-borde min-h-11 flex-none self-start justify-self-start" :disabled="preparando" @click="verEjemplo">
-      <Loader v-if="preparando" :size="18" class="animate-spin" aria-hidden="true" />
-      <FileDown v-else :size="18" aria-hidden="true" />
-      Ver un informe de ejemplo (PDF)
-    </button>
+    <WhatsappView v-if="verWhatsapp" v-show="abierta === 'whatsapp'" ref="whatsapp" />
+
+    <VistaPdf v-if="ejemplo" :archivo="ejemplo" nombre="Informe-de-ejemplo.pdf" titulo="Informe de ejemplo" @cerrar="ejemplo = null" />
 
     <!-- Datos de la empresa -->
     <section v-if="abierta === 'empresa'" class="tarjeta p-0">
@@ -253,9 +280,11 @@ async function verEjemplo() {
         <label class="etiqueta">Pie de los informes (texto legal, agradecimiento…)
           <textarea v-model="empresa.pie" rows="3" class="campo" maxlength="300" />
         </label>
-        <div class="flex flex-wrap gap-2">
-          <button class="btn flex-none" :disabled="guardando === 'empresa'"><Save :size="18" aria-hidden="true" />Guardar</button>
-          <button type="button" class="btn-borde flex-none" @click="restablecer('empresa', 'Datos de la empresa')"><RotateCcw :size="18" aria-hidden="true" />Valores de fábrica</button>
+        <div class="pie-fijo rounded-b-2xl">
+          <div class="flex flex-wrap-reverse items-center justify-between gap-2">
+            <button type="button" class="btn-texto" @click="restablecer('empresa', 'Datos de la empresa')"><RotateCcw :size="16" aria-hidden="true" />Valores de fábrica</button>
+            <button class="btn" :disabled="guardando === 'empresa'"><Save :size="18" aria-hidden="true" />Guardar</button>
+          </div>
         </div>
       </form>
     </section>
@@ -318,7 +347,7 @@ async function verEjemplo() {
                   <input v-model="tema.primario" class="campo" maxlength="7" autocapitalize="none" spellcheck="false" aria-label="Código del color principal" />
                 </span>
               </label>
-              <label class="etiqueta">Color de acento (destacados y botón +)
+              <label class="etiqueta">Color de acento (destacados y botón «Nuevo»)
                 <span class="flex gap-2">
                   <input v-model="tema.acento" type="color" class="h-11 w-14 shrink-0 cursor-pointer rounded-xl border border-brand-200 bg-white p-1" aria-label="Elegir color de acento" />
                   <input v-model="tema.acento" class="campo" maxlength="7" autocapitalize="none" spellcheck="false" aria-label="Código del color de acento" />
@@ -349,7 +378,7 @@ async function verEjemplo() {
             <p v-else-if="!encabezadoLegible" class="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700"><CircleAlert :size="16" aria-hidden="true" />El color del encabezado es demasiado claro: el texto blanco no se leería. Elige uno más oscuro.</p>
             <div class="flex flex-wrap gap-2">
               <button class="btn flex-none" :disabled="guardando === 'tema' || !coloresValidos || !primarioLegible || !encabezadoLegible"><Save :size="18" aria-hidden="true" />Guardar colores y fondo</button>
-              <button type="button" class="btn-borde flex-none" @click="restablecer('tema', 'Colores')"><RotateCcw :size="18" aria-hidden="true" />Valores de fábrica</button>
+              <button type="button" class="btn-texto" @click="restablecer('tema', 'Colores')"><RotateCcw :size="18" aria-hidden="true" />Valores de fábrica</button>
             </div>
           </form>
         </div>
@@ -379,9 +408,11 @@ async function verEjemplo() {
           <label class="flex min-h-11 items-center gap-3 text-sm"><input v-model="informes.pdfFotos" type="checkbox" class="size-5 accent-brand-600" />Fotografías de la visita</label>
           <label class="flex min-h-11 items-center gap-3 text-sm"><input v-model="informes.pdfFirma" type="checkbox" class="size-5 accent-brand-600" />Firma y conformidad del cliente</label>
         </fieldset>
-        <div class="flex flex-wrap gap-2">
-          <button class="btn flex-none" :disabled="guardando === 'informes'"><Save :size="18" aria-hidden="true" />Guardar</button>
-          <button type="button" class="btn-borde flex-none" @click="restablecer('informes', 'Informes')"><RotateCcw :size="18" aria-hidden="true" />Valores de fábrica</button>
+        <div class="pie-fijo rounded-b-2xl">
+          <div class="flex flex-wrap-reverse items-center justify-between gap-2">
+            <button type="button" class="btn-texto" @click="restablecer('informes', 'Informes')"><RotateCcw :size="16" aria-hidden="true" />Valores de fábrica</button>
+            <button class="btn" :disabled="guardando === 'informes'"><Save :size="18" aria-hidden="true" />Guardar</button>
+          </div>
         </div>
       </form>
     </section>
@@ -412,9 +443,11 @@ async function verEjemplo() {
           </div>
         </div>
         <button type="button" class="btn-borde flex-none self-start" :disabled="tipos.length >= 12" @click="agregarTipo(); abiertoTipo = tipos.length - 1"><Plus :size="18" aria-hidden="true" />Agregar tipo de visita</button>
-        <div class="flex flex-wrap gap-2">
-          <button class="btn flex-none" :disabled="guardando === 'tipos'"><Save :size="18" aria-hidden="true" />Guardar</button>
-          <button type="button" class="btn-borde flex-none" @click="restablecer('tipos', 'Tipos de visita y checklists')"><RotateCcw :size="18" aria-hidden="true" />Valores de fábrica</button>
+        <div class="pie-fijo rounded-b-2xl">
+          <div class="flex flex-wrap-reverse items-center justify-between gap-2">
+            <button type="button" class="btn-texto" @click="restablecer('tipos', 'Tipos de visita y checklists')"><RotateCcw :size="16" aria-hidden="true" />Valores de fábrica</button>
+            <button class="btn" :disabled="guardando === 'tipos'"><Save :size="18" aria-hidden="true" />Guardar</button>
+          </div>
         </div>
       </form>
     </section>

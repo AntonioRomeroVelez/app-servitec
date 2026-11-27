@@ -40,8 +40,8 @@ const { fondoIngreso } = useConfiguracion()
         <label class="etiqueta">Clave
           <CampoClave v-model="clave" autocomplete="current-password" required />
         </label>
-        <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
-        <button class="btn-acento" :disabled="cargando">{{ cargando ? 'Entrando…' : 'Entrar' }}</button>
+        <p v-if="error" class="aviso-error">{{ error }}</p>
+        <button class="btn" :disabled="cargando">{{ cargando ? 'Entrando…' : 'Entrar' }}</button>
       </form>
 
       <p class="mt-6 text-center text-xs text-white/80"><b class="font-semibold">{{ APP.nombre }}</b> · {{ APP.lema }}</p>

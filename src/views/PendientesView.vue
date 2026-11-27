@@ -1,4 +1,5 @@
 <script setup>
+import Vacio from '../components/Vacio.vue'
 import { confirmar } from '../composables/useConfirmar'
 import { ref, watch, onMounted } from 'vue'
 import { RefreshCw, RotateCcw, Trash2, CloudUpload, CircleAlert, CheckCheck } from 'lucide-vue-next'
@@ -38,16 +39,13 @@ async function descartar(op) {
 <template>
   <div class="mb-3 flex items-center justify-between gap-2">
     <p class="text-sm text-brand-700">{{ estado.enLinea ? 'Con conexión' : 'Sin conexión' }}</p>
-    <button class="btn-acento min-h-10 flex-none text-sm" :disabled="estado.sincronizando || !ops.length" @click="enviar">
+    <button class="btn min-h-11 flex-none text-sm" :disabled="estado.sincronizando || !ops.length" @click="enviar">
       <RefreshCw :size="16" :class="{ 'animate-spin': estado.sincronizando }" aria-hidden="true" />
       Enviar ahora
     </button>
   </div>
 
-  <div v-if="!ops.length" class="tarjeta grid justify-items-center gap-2 py-10 text-center text-brand-700">
-    <CheckCheck :size="32" aria-hidden="true" />
-    <p>No hay cambios pendientes. Todo está enviado.</p>
-  </div>
+  <Vacio v-if="!ops.length" :icono="CheckCheck" texto="No hay cambios pendientes. Todo está enviado." />
 
   <ul class="grid gap-2.5 lg:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
     <li v-for="op in ops" :key="op.n" class="tarjeta grid gap-2 border-l-4" :class="op.estado === 'fallida' ? 'border-l-red-400' : 'border-l-brand-300'">

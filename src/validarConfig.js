@@ -3,9 +3,10 @@
 import { CONFIG_DEFECTO } from './configuracion.js'
 import { contraste } from './tema.js'
 import { normalizar } from './utils.js'
+import { IDS_VARIABLES } from './whatsapp.js'
 
 const IMAGENES = ['logo', 'logoClaro', 'fondoImagen']
-export const SECCIONES = ['empresa', 'tema', ...IMAGENES, 'informes', 'tipos']
+export const SECCIONES = ['empresa', 'tema', ...IMAGENES, 'informes', 'tipos', 'whatsapp']
 
 /** Devuelve el valor ya limpio de una sección o lanza Error con un mensaje en español. */
 export function valorSeccion(seccion, d = {}) {
@@ -34,6 +35,14 @@ export function valorSeccion(seccion, d = {}) {
     const prefijo = String(d.prefijo || '').trim().toUpperCase()
     if (!/^[A-Z0-9]{2,6}$/.test(prefijo)) throw new Error('El prefijo del número debe tener de 2 a 6 letras o números (por ejemplo INF)')
     return { prefijo, pdfChecklist: !!d.pdfChecklist, pdfFotos: !!d.pdfFotos, pdfFirma: !!d.pdfFirma, pdfObservaciones: !!d.pdfObservaciones }
+  }
+  if (seccion === 'whatsapp') {
+    const codigoPais = String(d.codigoPais || '').replace(/^\+/, '').trim()
+    if (!/^[1-9]\d{0,3}$/.test(codigoPais)) throw new Error('El código de país debe tener de 1 a 4 números (por ejemplo 593)')
+    if (!['corta', 'larga'].includes(d.formatoFecha)) throw new Error('Formato de fecha inválido')
+    if (!['12', '24'].includes(String(d.formatoHora))) throw new Error('Formato de hora inválido')
+    const ejemplos = Object.fromEntries(IDS_VARIABLES.map((v) => [v, String(d.ejemplos?.[v] ?? '').trim()]).filter(([, e]) => e))
+    return { activo: !!d.activo, codigoPais, formatoFecha: d.formatoFecha, formatoHora: String(d.formatoHora), ejemplos }
   }
   const tipos = Array.isArray(d.tipos) ? d.tipos : []
   if (tipos.length < 1 || tipos.length > 12) throw new Error('Debe haber entre 1 y 12 tipos de visita')

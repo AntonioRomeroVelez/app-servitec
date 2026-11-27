@@ -105,6 +105,6 @@ const texto = (d) => `${d.detalle}: ${d.valor} ${d.valor === 1 ? props.unidad.re
       </tbody>
     </table>
 
-    <button type="button" class="mt-1 text-xs font-semibold text-brand-700 underline" @click="verTabla = !verTabla">{{ verTabla ? 'Ver gráfico' : 'Ver como tabla' }}</button>
+    <button type="button" class="enlace !-mt-2.5" @click="verTabla = !verTabla">{{ verTabla ? 'Ver gráfico' : 'Ver como tabla' }}</button>
   </div>
 </template>

@@ -1,6 +1,10 @@
 <script setup>
+import BotonNuevo from '../components/BotonNuevo.vue'
+import Cargando from '../components/Cargando.vue'
+import Vacio from '../components/Vacio.vue'
+import PieFormulario from '../components/PieFormulario.vue'
 import { ref, reactive, computed, watch, onMounted } from 'vue'
-import { Building2, IdCard, KeyRound, Mail, Phone, Plus, Power, Users } from 'lucide-vue-next'
+import { Building2, IdCard, KeyRound, Mail, Phone, Power, Users } from 'lucide-vue-next'
 import { call } from '../api'
 import { useToast } from '../composables/useToast'
 import { confirmar } from '../composables/useConfirmar'
@@ -11,6 +15,7 @@ import Paginador from '../components/Paginador.vue'
 import Modal from '../components/Modal.vue'
 import Avatar from '../components/Avatar.vue'
 import Dato from '../components/Dato.vue'
+import { useSinGuardar } from '../composables/useSinGuardar'
 import { usePaginaLocal } from '../composables/usePaginaLocal'
 
 // Empresas del sistema. Solo las ve y administra el root: las crea con su superadministrador, las habilita o deshabilita y
@@ -36,6 +41,7 @@ const validarDueno = (d) =>
   ''
 
 const creando = ref(false)
+const salirDeAlta = useSinGuardar(() => creando.value && !credenciales.value && JSON.stringify(form) !== JSON.stringify(vacia()))
 
 async function cargar() {
   cargando.value = true
@@ -72,7 +78,8 @@ function abrir() {
   credenciales.value = null
   error.value = ''
 }
-const cerrar = () => {
+const cerrar = async () => {
+  if (!(await salirDeAlta())) return
   creando.value = false
   credenciales.value = null
 }
@@ -101,6 +108,8 @@ const cargandoAdmins = ref(false)
 const errorAdmins = ref('')
 const nuevoDueno = reactive(duenoVacio()) // para una empresa que se quedó sin superadministrador
 const claveEntregar = ref(null) // { accion, nombre, usuario, clave }
+const salirDeAdmins = useSinGuardar(() => !!adminsDe.value && !admins.value.length && Object.values(nuevoDueno).some(Boolean))
+const cerrarAdmins = async () => (await salirDeAdmins()) && (adminsDe.value = null)
 
 async function abrirAdmins(e) {
   adminsDe.value = e
@@ -162,7 +171,7 @@ async function alternar(e) {
 </script>
 
 <template>
-  <BarraFiltros v-model="q" placeholder="Buscar nombre, RUC o correo" :activos="(estado ? 1 : 0) + (plan ? 1 : 0)">
+  <BarraFiltros v-model="q" placeholder="Buscar empresa" :activos="(estado ? 1 : 0) + (plan ? 1 : 0)">
     <template #filtros>
       <select v-model="estado" class="campo !min-h-10 !py-1.5 text-sm" aria-label="Filtrar por estado">
         <option value="">Activas y desactivadas</option>
@@ -174,19 +183,14 @@ async function alternar(e) {
         <option v-for="p in PLANES" :key="p" :value="p">{{ p }}</option>
       </select>
     </template>
-    <template #acciones>
-      <button class="btn-acento !min-h-10 !px-3 flex-none" aria-label="Nueva empresa" @click="abrir">
-        <Plus :size="18" aria-hidden="true" />
-        <span class="sr-only sm:not-sr-only">Nueva</span>
-      </button>
-    </template>
   </BarraFiltros>
 
-  <p v-if="error && !creando" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+  <p v-if="error && !creando" class="aviso-error mb-3">{{ error }}</p>
 
   <Modal v-if="creando" :titulo="credenciales ? 'Empresa creada' : 'Nueva empresa'" @cerrar="cerrar">
     <CredencialesNuevas v-if="credenciales" v-bind="credenciales" de-root @listo="cerrar" />
-    <form v-else class="grid gap-3" @submit.prevent="guardar">
+    <form v-else @submit.prevent="guardar">
+      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       <label class="etiqueta">Nombre de la empresa
         <input v-model.trim="form.nombre" class="campo" required maxlength="60" />
       </label>
@@ -202,14 +206,14 @@ async function alternar(e) {
       <label class="etiqueta">Teléfono
         <input v-model.trim="form.telefono" class="campo" type="tel" required />
       </label>
+      </div>
       <p class="text-xs text-brand-700/80">Se crea su superadministrador: el usuario sale del nombre de la empresa y la clave temporal es tu cédula. Él personaliza la empresa y crea al administrador.</p>
-      <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
-      <button class="btn-acento" :disabled="guardando">{{ guardando ? 'Creando…' : 'Crear empresa' }}</button>
+      <PieFormulario texto="Crear empresa" :cargando="guardando" :error="error" @cancelar="cerrar" />
     </form>
   </Modal>
 
   <!-- Superadministrador de la empresa -->
-  <Modal v-if="adminsDe" :titulo="`Superadministrador de ${adminsDe.nombre}`" @cerrar="adminsDe = null">
+  <Modal v-if="adminsDe" :titulo="`Superadministrador de ${adminsDe.nombre}`" @cerrar="cerrarAdmins">
     <p v-if="cargandoAdmins" class="py-4 text-center text-brand-700">Cargando…</p>
     <form v-else-if="!admins.length" class="grid gap-3" @submit.prevent="crearAdmin">
       <p class="text-sm text-brand-800">Esta empresa no tiene superadministrador.</p>
@@ -239,22 +243,22 @@ async function alternar(e) {
         <button v-if="!a.claveTemporal" class="btn min-h-11" @click="restablecerAdmin(a)"><KeyRound :size="18" aria-hidden="true" />Restablecer clave</button>
       </li>
     </ul>
-    <p v-if="errorAdmins" class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ errorAdmins }}</p>
+    <p v-if="errorAdmins" class="aviso-error mt-3">{{ errorAdmins }}</p>
   </Modal>
   <Modal v-if="claveEntregar" :titulo="claveEntregar.accion" @cerrar="claveEntregar = null">
     <CredencialesNuevas v-bind="claveEntregar" de-root @listo="claveEntregar = null" />
   </Modal>
 
-  <p v-if="cargando && !empresas.length" class="py-10 text-center text-brand-700">Cargando…</p>
-  <p v-else-if="!empresas.length" class="py-10 text-center text-brand-700/70">Todavía no hay empresas.</p>
-  <p v-else-if="!filtradas.length" class="py-10 text-center text-brand-700/70">No hay empresas que coincidan.</p>
+  <Cargando v-if="cargando && !empresas.length" />
+  <Vacio v-else-if="!empresas.length" :icono="Building2" texto="Todavía no hay empresas." />
+  <Vacio v-else-if="!filtradas.length" :icono="Building2" texto="No hay empresas que coincidan." />
 
   <ul class="grid gap-2.5 lg:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
     <li v-for="e in pag.visibles.value" :key="e.id" class="tarjeta grid gap-3 border-l-4" :class="e.activa ? 'border-l-emerald-500' : 'border-l-red-400 opacity-80'">
       <div class="flex items-start gap-3">
         <Avatar :icono="Building2" :inactivo="!e.activa" />
         <div class="grid min-w-0 flex-1 gap-1">
-          <strong class="text-base leading-snug break-words text-brand-900">{{ e.nombre }}</strong>
+          <strong class="text-base leading-snug wrap-anywhere text-brand-900">{{ e.nombre }}</strong>
           <span class="flex flex-wrap items-center gap-1.5 text-xs font-semibold">
             <span class="rounded-full px-2.5 py-0.5" :class="e.activa ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'">{{ e.activa ? 'Activa' : 'Desactivada' }}</span>
             <span class="rounded-full bg-brand-100 px-2.5 py-0.5 text-brand-800">Plan {{ e.plan }}</span>
@@ -267,14 +271,15 @@ async function alternar(e) {
         <Dato v-if="e.datos?.telefono" :icono="Phone" etiqueta="Teléfono">{{ e.datos.telefono }}</Dato>
         <Dato v-if="e.datos?.correo" :icono="Mail" etiqueta="Correo" ajustar>{{ e.datos.correo }}</Dato>
       </div>
-      <div class="flex flex-wrap gap-2">
-        <button class="btn-borde min-h-10 text-sm" @click="abrirAdmins(e)"><KeyRound :size="16" aria-hidden="true" />Superadministrador</button>
-        <button class="min-h-10 flex-1 rounded-xl border px-4 text-sm font-semibold sm:flex-none" :class="e.activa ? 'border-red-600 text-red-700' : 'border-emerald-600 text-emerald-700'" @click="alternar(e)">
-          <Power :size="16" class="mr-1.5 inline" aria-hidden="true" />{{ e.activa ? 'Desactivar' : 'Activar' }}
+      <div class="flex items-center gap-2">
+        <button class="btn-borde min-h-11 text-sm" @click="abrirAdmins(e)"><KeyRound :size="16" aria-hidden="true" />Superadministrador</button>
+        <button class="btn-icono sm:ml-auto" :class="{ '!border-emerald-600 !text-emerald-700': !e.activa }" :aria-label="`${e.activa ? 'Desactivar' : 'Activar'} ${e.nombre}`" :title="e.activa ? 'Desactivar' : 'Activar'" @click="alternar(e)">
+          <Power :size="18" aria-hidden="true" />
         </button>
       </div>
     </li>
   </ul>
 
+  <BotonNuevo texto="Nueva empresa" @click="abrir" />
   <Paginador :total="pag.total.value" :offset="pag.offset.value" :limite="pag.limite" @ir="pag.ir" />
 </template>

@@ -1,4 +1,5 @@
 <script setup>
+import Cargando from './Cargando.vue'
 import { confirmar } from '../composables/useConfirmar'
 import { ref, computed, onMounted } from 'vue'
 import { useFotos } from '../composables/useFotos'
@@ -76,7 +77,7 @@ async function borrar() {
   <section class="grid gap-2 border-t border-brand-100 pt-3">
     <h3 class="font-semibold text-brand-800">Fotos ({{ fotos.length }})</h3>
 
-    <p v-if="cargando" class="text-sm text-brand-700/70">Cargando fotos…</p>
+    <Cargando v-if="cargando" class="!py-2 text-sm" texto="Cargando fotos…" />
     <p v-else-if="!fotos.length" class="text-sm text-brand-700/70">Aún no hay fotos.</p>
 
     <ul v-if="fotos.length" class="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8">
@@ -89,7 +90,7 @@ async function borrar() {
     </ul>
 
     <template v-if="puedeSubir">
-      <label class="btn-acento min-h-12 flex-none cursor-pointer" :class="{ 'pointer-events-none opacity-60': progreso.startsWith('Subiendo') }">
+      <label class="btn-borde min-h-12 flex-none cursor-pointer sm:justify-self-start" :class="{ 'pointer-events-none opacity-60': progreso.startsWith('Subiendo') }">
         <Camera :size="20" aria-hidden="true" />
         Agregar fotos
         <input type="file" accept="image/*" multiple class="sr-only" :disabled="progreso.startsWith('Subiendo')" @change="elegir" />
@@ -98,7 +99,7 @@ async function borrar() {
     </template>
 
     <p v-if="progreso" class="text-sm text-brand-700">{{ progreso }}</p>
-    <p v-if="error" class="whitespace-pre-line rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+    <p v-if="error" class="aviso-error whitespace-pre-line">{{ error }}</p>
   </section>
 
   <!-- Visor a pantalla completa -->

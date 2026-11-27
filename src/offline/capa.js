@@ -12,7 +12,7 @@ import { aplicarPendientes } from './overlay.js'
 import { estado } from './estado.js'
 
 const ENCOLABLES = new Set(['visitas_create', 'visitas_update', 'informes_create', 'informes_update', 'informes_delete', 'fotos_upload', 'fotos_delete'])
-const ES_LECTURA = /^((informes|visitas)_(list|get)|fotos_(list|get)|tecnicos_list|clientes_list|configuracion_get)$/
+const ES_LECTURA = /^((informes|visitas)_(list|get)|fotos_(list|get)|tecnicos_list|clientes_list|configuracion_get|dashboard_resumen)$/
 const MAX_FOTOS_GUARDADAS = 40
 
 const errorOffline = (msg = 'Sin conexión. Esta acción necesita internet.') => Object.assign(new Error(msg), { code: 'OFFLINE' })
@@ -30,12 +30,39 @@ export function crearCapaOffline({ red, sesion, nuevoId = () => crypto.randomUUI
   }
 
   // ---------- lecturas ----------
-  async function leer(action, params) {
+  // Lecturas iguales pedidas a la vez comparten una sola petición. Un cambio las descarta (podrían venir sin él).
+  const enVuelo = new Map()
+
+  function pedir(action, params, clave) {
+    let p = enVuelo.get(clave)
+    if (!p) {
+      p = red(action, params).finally(() => enVuelo.get(clave) === p && enVuelo.delete(clave))
+      enVuelo.set(clave, p)
+    }
+    return p
+  }
+
+  // `previo(datos)`: se llama con la última copia guardada mientras llega la respuesta del servidor, para mostrar algo
+  // al instante. No se llama si el servidor contesta antes.
+  async function leer(action, params, { previo } = {}) {
     const s = sesion()
     const clave = `${s?.usuarioId}|${action}|${estable(params)}`
+    const superponer = async (data) => aplicarPendientes(action, params, data, s ? await almacen.cola(s.usuarioId) : [])
+    let llego = false
+    const peticion = pedir(action, params, clave).finally(() => (llego = true))
+    if (previo) {
+      almacen
+        .leerLectura(clave)
+        .then(async (copia) => {
+          if (!copia || llego) return
+          const r = await superponer(copia.data)
+          if (!llego && r !== null && r !== undefined) previo(r)
+        })
+        .catch(() => {})
+    }
     let data
     try {
-      data = await red(action, params)
+      data = await peticion
       estado.enLinea = true
       almacen.guardarLectura(clave, data, action).then(() => action === 'fotos_get' && almacen.recortarLecturas('fotos_get', MAX_FOTOS_GUARDADAS))
     } catch (e) {
@@ -43,8 +70,7 @@ export function crearCapaOffline({ red, sesion, nuevoId = () => crypto.randomUUI
       estado.enLinea = false
       data = (await almacen.leerLectura(clave))?.data ?? null
     }
-    const ops = s ? await almacen.cola(s.usuarioId) : []
-    const r = aplicarPendientes(action, params, data, ops)
+    const r = await superponer(data)
     if (r === null || r === undefined) throw errorOffline('Sin conexión y sin datos guardados para esto.')
     return r
   }
@@ -137,7 +163,11 @@ export function crearCapaOffline({ red, sesion, nuevoId = () => crypto.randomUUI
     }
   }
 
-  const call = (action, payload = {}) => (ENCOLABLES.has(action) ? mutar(action, payload) : ES_LECTURA.test(action) ? leer(action, payload) : directo(action, payload))
+  function call(action, payload = {}, opciones) {
+    if (ES_LECTURA.test(action)) return leer(action, payload, opciones)
+    enVuelo.clear()
+    return ENCOLABLES.has(action) ? mutar(action, payload) : directo(action, payload)
+  }
 
   // ---------- sincronización ----------
   let enCurso = null

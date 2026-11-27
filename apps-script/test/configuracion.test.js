@@ -19,7 +19,7 @@ test('la lectura es pública (sirve para la pantalla de ingreso) y no expone dat
   const r = env.llamar('configuracion_get', {}) // sin sesión
   assert.equal(r.ok, true)
   const claves = Object.keys(r.data).sort()
-  assert.deepEqual(claves, ['empresa', 'fondoImagen', 'informes', 'logo', 'logoClaro', 'tema', 'tipos'])
+  assert.deepEqual(claves, ['empresa', 'fondoImagen', 'informes', 'logo', 'logoClaro', 'tema', 'tipos', 'whatsapp'])
   assert.ok(!JSON.stringify(r.data).match(/hash|salt|clave|token/i))
 })
 

@@ -1,4 +1,6 @@
 <script setup>
+import Cargando from '../components/Cargando.vue'
+import Vacio from '../components/Vacio.vue'
 import { ref, computed, watch, onMounted } from 'vue'
 import { Bell, BellRing, CalendarClock, CalendarPlus, CalendarX, ArrowRightLeft, ClipboardCheck, FileCheck, CheckCheck } from 'lucide-vue-next'
 import { useNotificaciones } from '../composables/useNotificaciones'
@@ -45,8 +47,8 @@ onMounted(cargar)
     </button>
   </div>
 
-  <p v-if="cargando && !items.length" class="py-10 text-center text-brand-700">Cargando…</p>
-  <p v-else-if="!mostradas.length" class="py-10 text-center text-brand-700/70">{{ soloSinLeer ? 'No tienes notificaciones sin leer.' : 'No tienes notificaciones.' }}</p>
+  <Cargando v-if="cargando && !items.length" />
+  <Vacio v-else-if="!mostradas.length" :icono="Bell" :texto="soloSinLeer ? 'No tienes notificaciones sin leer.' : 'No tienes notificaciones.'" />
 
   <ul class="grid gap-2.5 lg:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
     <li v-for="n in pag.visibles.value" :key="n.id">

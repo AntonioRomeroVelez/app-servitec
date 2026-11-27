@@ -1,6 +1,7 @@
 <script setup>
-import { reactive, ref, computed } from 'vue'
-import { ClipboardList, FileText, ListChecks, MessageSquareText, PenLine, Plus, Trash2, CircleAlert, Link2 } from 'lucide-vue-next'
+import PieFormulario from '../components/PieFormulario.vue'
+import { reactive, ref, computed, nextTick } from 'vue'
+import { ClipboardList, FileText, ListChecks, MessageSquareText, PenLine, Plus, Trash2, Link2 } from 'lucide-vue-next'
 import { ESTADOS } from '../composables/useInformes'
 import { useConfiguracion } from '../composables/useConfiguracion'
 import { leerChecklist, actividadesIniciales, ejemploDeActividad, actividadesUtiles, sinCompletar, RESULTADOS, NO_APLICA, MAX_ACTIVIDADES } from '../plantillas'
@@ -8,6 +9,7 @@ import FirmaPad from '../components/FirmaPad.vue'
 import CampoTexto from '../components/CampoTexto.vue'
 import { hoy } from '../utils'
 import { confirmar } from '../composables/useConfirmar'
+import { useSinGuardar } from '../composables/useSinGuardar'
 
 // `inicial` = edición de un informe existente; `prefill` = datos sugeridos al crear desde una visita
 const props = defineProps({ inicial: Object, prefill: Object, cargando: Boolean })
@@ -35,6 +37,18 @@ const conClave = (lista) => lista.map((i) => ({ item: '', resultado: '', obs: ''
 const guardadas = leerChecklist(props.inicial?.checklist)
 const actividades = ref(conClave(guardadas.length ? guardadas : actividadesIniciales()))
 const error = ref('')
+const formulario = ref(null)
+const intentoFinalizar = ref(false) // tras un intento fallido se señalan las actividades incompletas
+// Incompleta: empezada pero sin descripción o sin resultado; si todas están vacías, se señala la primera
+const incompleta = (a, n) =>
+  intentoFinalizar.value && form.estado === 'Finalizado' && !(a.item.trim() && a.resultado) && (!!(a.item.trim() || a.resultado) || (n === 0 && !actividadesUtiles(actividades.value).length))
+// Muestra el error y lleva la vista a la primera actividad señalada
+async function senalar(mensaje) {
+  error.value = mensaje
+  intentoFinalizar.value = true
+  await nextTick()
+  formulario.value?.querySelector('[data-incompleta="true"]')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+}
 // Si el tipo del informe ya no está en la lista (se quitó en Ajustes), se conserva como opción para no perderlo
 const opcionesTipo = computed(() => (form.tipo && !nombresTipos.value.includes(form.tipo) ? [...nombresTipos.value, form.tipo] : nombresTipos.value))
 const marcadas = computed(() => actividades.value.filter((a) => a.resultado).length)
@@ -48,12 +62,21 @@ async function quitar(a) {
 const marcar = (a, id) => (a.resultado = a.resultado === id ? '' : id)
 const opcionesDe = (a) => (a.resultado === NO_APLICA.id ? [...RESULTADOS, NO_APLICA] : RESULTADOS)
 
+const foto = () => JSON.stringify([form, actividadesUtiles(actividades.value)])
+const original = foto()
+const salir = useSinGuardar(() => foto() !== original)
+const cancelar = async () => (await salir()) && emit('cancelar')
+defineExpose({ cancelar }) // la X y Escape de la ventana pasan por aquí
+
 async function enviar() {
   error.value = ''
   const lista = actividadesUtiles(actividades.value)
+  // Los informes que ya estaban finalizados sin actividades (anteriores a esta regla) se pueden seguir corrigiendo
+  const antiguoSinActividades = props.inicial?.estado === 'Finalizado' && !guardadas.length
   if (form.estado === 'Finalizado') {
+    if (!lista.length && !antiguoSinActividades) return senalar('Para finalizar, agrega al menos una actividad con su descripción y su resultado.')
     const pend = sinCompletar(actividades.value)
-    if (pend) return (error.value = `Para finalizar, cada actividad necesita su descripción y su resultado (faltan ${pend}).`)
+    if (pend) return senalar(`Para finalizar, cada actividad necesita su descripción y su resultado (faltan ${pend}).`)
   }
   if (form.estado === 'Finalizado' && props.inicial?.estado !== 'Finalizado') {
     const ok = await confirmar({ titulo: '¿Finalizar el informe?', texto: 'Una vez finalizado solo un administrador podrá modificarlo.', confirmar: 'Finalizar' })
@@ -64,12 +87,13 @@ async function enviar() {
 </script>
 
 <template>
-  <form class="@container grid gap-4" @submit.prevent="enviar">
+  <form ref="formulario" class="@container flex flex-col gap-4" @submit.prevent="enviar">
     <p v-if="inicial?.numero" class="font-mono text-sm font-semibold text-brand-700">{{ inicial.numero }}</p>
     <p v-if="form.visitaId" class="flex items-center gap-2 rounded-xl bg-brand-100 px-3 py-2 text-sm text-brand-800"><Link2 :size="16" class="shrink-0" aria-hidden="true" />Vinculado a una visita agendada.</p>
 
+    <div class="grid gap-4 @5xl:grid-cols-2 @5xl:grid-rows-[auto_auto_1fr] @5xl:items-start">
     <!-- Datos -->
-    <section class="tarjeta grid gap-3">
+    <section class="tarjeta @container grid gap-3">
       <h3 class="flex items-center gap-2 font-semibold text-brand-900"><FileText :size="18" class="text-brand-600" aria-hidden="true" />Datos del informe</h3>
       <label class="etiqueta">Título
         <input v-model.trim="form.titulo" class="campo" required maxlength="120" placeholder="Ej.: Mantenimiento de cámaras - Banco del Sur" />
@@ -77,7 +101,7 @@ async function enviar() {
       <label class="etiqueta">Cliente
         <input v-model.trim="form.cliente" class="campo" required placeholder="Nombre del cliente o empresa" />
       </label>
-      <div class="grid grid-cols-1 gap-3 @sm:grid-cols-2 @3xl:grid-cols-4">
+      <div class="grid grid-cols-2 gap-3 @3xl:grid-cols-4 [&>label]:grid-cols-1">
         <label class="etiqueta">Fecha
           <input v-model="form.fecha" type="date" class="campo" required />
         </label>
@@ -98,7 +122,7 @@ async function enviar() {
     </section>
 
     <!-- Actividades -->
-    <section class="grid gap-2.5">
+    <section class="@container grid content-start gap-2.5 @5xl:col-start-2 @5xl:row-span-3 @5xl:row-start-1">
       <div class="flex items-center justify-between gap-2">
         <h3 class="flex items-center gap-2 font-semibold text-brand-900"><ListChecks :size="18" class="text-brand-600" aria-hidden="true" />Actividades realizadas</h3>
         <span v-if="actividades.length" class="rounded-full bg-brand-100 px-2.5 py-0.5 text-xs font-semibold text-brand-800">{{ marcadas }} de {{ actividades.length }}</span>
@@ -106,7 +130,7 @@ async function enviar() {
       <p v-if="!actividades.length" class="rounded-xl bg-brand-50 px-3 py-3 text-sm text-brand-700">
         <ClipboardList :size="16" class="mr-1.5 inline" aria-hidden="true" />Todavía no hay actividades. Agrega la primera.
       </p>
-      <div v-for="(a, n) in actividades" :key="a._k" class="tarjeta grid gap-2.5 p-3">
+      <div v-for="(a, n) in actividades" :key="a._k" class="tarjeta grid gap-2.5 p-3" :class="{ '!border-red-500 ring-2 ring-red-200': incompleta(a, n) }" :data-incompleta="incompleta(a, n)">
         <div class="flex items-start gap-2">
           <span class="mt-2.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-brand-100 text-xs font-bold text-brand-800">{{ n + 1 }}</span>
           <CampoTexto v-model="a.item" :filas="1" class="min-w-0 flex-1" maxlength="500" :placeholder="ejemploDeActividad(n, form.tipo, tipos)" :aria-label="`Actividad ${n + 1}`" />
@@ -151,11 +175,8 @@ async function enviar() {
       <FirmaPad v-model="form.firma" :nombre="form.firmante" />
     </section>
 
-    <p v-if="error" class="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert"><CircleAlert :size="16" class="mt-0.5 shrink-0" aria-hidden="true" />{{ error }}</p>
-
-    <div class="flex gap-2.5 sm:justify-end">
-      <button type="button" class="btn-borde" @click="emit('cancelar')">Cancelar</button>
-      <button type="submit" class="btn" :disabled="cargando">{{ cargando ? 'Guardando…' : 'Guardar informe' }}</button>
     </div>
+
+    <PieFormulario texto="Guardar informe" :cargando="cargando" :error="error" @cancelar="cancelar" />
   </form>
 </template>

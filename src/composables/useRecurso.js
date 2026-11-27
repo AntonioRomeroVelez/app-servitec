@@ -17,7 +17,11 @@ export function crearRecurso(nombre, ordenar, { limite = 0 } = {}) {
   const parametros = ref({}) // filtros del último cargar() (para volver a mostrarlos y para recargar)
   let servidos = 0 // cuántos items entregó el servidor en las páginas pedidas (no cuenta los creados localmente)
 
+  let activas = 0 // peticiones en curso: "cargando" termina cuando acaban todas
+  let turno = 0 // número de la última carga pedida: las respuestas de cargas anteriores se ignoran
+
   async function run(fn) {
+    activas++
     cargando.value = true
     error.value = ''
     try {
@@ -26,7 +30,7 @@ export function crearRecurso(nombre, ordenar, { limite = 0 } = {}) {
       error.value = e.message || 'Error inesperado'
       throw e
     } finally {
-      cargando.value = false
+      cargando.value = --activas > 0
     }
   }
 
@@ -45,11 +49,15 @@ export function crearRecurso(nombre, ordenar, { limite = 0 } = {}) {
     run(async () => {
       params = limite && !params.limit ? { ...params, limit: limite } : params // tamaño de página por defecto
       parametros.value = params
-      const r = await call(`${nombre}_list`, params)
-      items.value = [...r.items].sort(ordenar)
-      servidos = r.items.length
-      hayMas.value = r.hasMore
-      meta.value = { total: r.total, antes: r.antes ?? 0 }
+      const mio = ++turno
+      const mostrar = (r) => {
+        if (mio !== turno) return
+        items.value = [...r.items].sort(ordenar)
+        servidos = r.items.length
+        hayMas.value = r.hasMore
+        meta.value = { total: r.total, antes: r.antes ?? 0 }
+      }
+      mostrar(await call(`${nombre}_list`, params, { previo: mostrar }))
     })
 
   const recargar = () => cargar(parametros.value)
@@ -108,6 +116,7 @@ export function crearRecurso(nombre, ordenar, { limite = 0 } = {}) {
     })
 
   const limpiar = () => {
+    turno++
     items.value = []
     error.value = ''
     hayMas.value = false

@@ -276,3 +276,22 @@ test('actividades: se finaliza con No cumple o Falla sin observación aparte, pe
   assert.equal(crear([{ item: 'Cambié el disco', resultado: 'no', obs: '' }, { item: 'Revisé el cableado', resultado: 'falla', obs: '' }]).ok, true)
   assert.match(crear([{ item: '   ', resultado: 'ok', obs: '' }]).error, /cada actividad necesita/)
 })
+
+test('no se finaliza un informe sin actividades; los antiguos ya finalizados se pueden seguir corrigiendo', () => {
+  const { env, admin, tec } = entornoListo()
+  for (const checklist of ['', '[]']) {
+    assert.match(env.llamar('informes_create', { data: datosInforme({ estado: 'Finalizado', checklist }) }, tec.token).error, /al menos una actividad/)
+    const borrador = env.ok('informes_create', { data: datosInforme({ checklist }) }, tec.token) // en borrador sí se guarda
+    assert.match(env.llamar('informes_update', { id: borrador.id, data: { estado: 'Finalizado' } }, tec.token).error, /al menos una actividad/)
+  }
+
+  // a un finalizado con actividades no se le pueden quitar todas
+  const completo = env.ok('informes_create', { data: datosInforme({ estado: 'Finalizado', checklist: checklistCompleto }) }, tec.token)
+  assert.match(env.llamar('informes_update', { id: completo.id, data: { checklist: '' } }, admin.token).error, /al menos una actividad/)
+
+  // informe finalizado sin actividades guardado antes de la regla: se simula vaciando su celda en la hoja
+  const hoja = env.hoja('Informes')
+  const columna = (nombre) => hoja.filas[0].indexOf(nombre)
+  hoja.filas.find((f) => f[columna('id')] === completo.id)[columna('checklist')] = ''
+  assert.equal(env.llamar('informes_update', { id: completo.id, data: { titulo: 'Corregido' } }, admin.token).ok, true)
+})

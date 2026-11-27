@@ -91,8 +91,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="grid gap-3">
-    <label class="etiqueta">Nombres completos
+  <div class="grid content-start gap-3 lg:grid-cols-2 lg:items-start lg:gap-x-6">
+    <label class="etiqueta lg:col-span-2">Nombres completos
       <input v-model="form.nombre" class="campo" required autocomplete="off" maxlength="120" placeholder="Nombres y apellidos" />
     </label>
 
@@ -105,7 +105,7 @@ onBeforeUnmount(() => {
       </label>
     </div>
 
-    <p v-if="avisoCedula" class="-mt-1 flex items-start gap-1 text-xs text-red-700" role="alert"><CircleAlert :size="14" class="mt-0.5 shrink-0" aria-hidden="true" />{{ avisoCedula }}</p>
+    <p v-if="avisoCedula" class="-mt-1 lg:col-span-2 flex items-start gap-1 text-xs text-red-700" role="alert"><CircleAlert :size="14" class="mt-0.5 shrink-0" aria-hidden="true" />{{ avisoCedula }}</p>
 
     <div v-if="!editando" class="grid gap-1">
       <label class="etiqueta">Usuario de ingreso
@@ -115,7 +115,7 @@ onBeforeUnmount(() => {
       <p v-else-if="estado === 'libre'" class="flex items-center gap-1 text-xs text-emerald-700"><Check :size="14" aria-hidden="true" />Disponible · {{ manual ? 'personalizado' : 'sugerido' }}</p>
       <p v-else-if="estado === 'ocupado'" class="flex items-center gap-1 text-xs text-red-700"><CircleAlert :size="14" aria-hidden="true" />Ya está en uso: elige otro.</p>
       <p v-else-if="estado === 'invalido'" class="flex items-center gap-1 text-xs text-red-700"><CircleAlert :size="14" aria-hidden="true" />De 3 a 30 caracteres: letras minúsculas, números, punto, guion o guion bajo.</p>
-      <button v-if="manual" type="button" class="justify-self-start text-xs font-semibold text-brand-700 underline" @click="usarSugerido">Usar el sugerido</button>
+      <button v-if="manual" type="button" class="enlace justify-self-start" @click="usarSugerido">Usar el sugerido</button>
     </div>
 
     <label class="etiqueta">Correo
@@ -138,7 +138,7 @@ onBeforeUnmount(() => {
         <option v-for="r in roles" :key="r" :value="r">{{ r }}</option>
       </select>
     </label>
-    <p v-if="nuevaCuenta" class="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-800">
+    <p v-if="nuevaCuenta" class="lg:col-span-2 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-800">
       La <b>clave temporal es el número de cédula</b>. La persona entra con su usuario y su cédula, y deberá crear una clave nueva en su primer ingreso.
     </p>
   </div>

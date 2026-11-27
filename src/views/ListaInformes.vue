@@ -1,4 +1,6 @@
 <script setup>
+import Cargando from '../components/Cargando.vue'
+import Vacio from '../components/Vacio.vue'
 import { ref, watch, onBeforeUnmount } from 'vue'
 import { ESTADOS } from '../composables/useInformes'
 import EstadoBadge from '../components/EstadoBadge.vue'
@@ -6,14 +8,13 @@ import BarraFiltros from '../components/BarraFiltros.vue'
 import Paginador from '../components/Paginador.vue'
 import Dato from '../components/Dato.vue'
 import { bordeDeEstado } from '../estados'
-import { Building2, CalendarDays, CloudUpload, Tag, UserRound } from 'lucide-vue-next'
+import { Building2, CalendarDays, CloudUpload, FileText, UserRound } from 'lucide-vue-next'
 import { fechaCorta } from '../utils'
 
 // La búsqueda, el filtro y las páginas se resuelven en el servidor
 const props = defineProps({
   informes: Array,
   cargando: Boolean,
-  mostrarAutor: Boolean,
   total: { type: Number, default: 0 },
   offset: { type: Number, default: 0 },
   limite: { type: Number, default: 15 },
@@ -33,7 +34,7 @@ onBeforeUnmount(() => clearTimeout(temporizador))
 </script>
 
 <template>
-  <BarraFiltros v-model="q" placeholder="Buscar título, cliente, número o responsable" recargar @refrescar="$emit('refrescar')">
+  <BarraFiltros v-model="q" placeholder="Buscar informe" recargar @refrescar="$emit('refrescar')">
     <template #rapido>
       <select v-model="estado" class="campo !min-h-10 !w-auto !py-1.5 text-sm" aria-label="Filtrar por estado">
         <option value="">Todos</option>
@@ -42,8 +43,10 @@ onBeforeUnmount(() => clearTimeout(temporizador))
     </template>
   </BarraFiltros>
 
-  <p v-if="cargando && !informes.length" class="py-10 text-center text-brand-700">Cargando…</p>
-  <p v-else-if="!informes.length" class="py-10 text-center text-brand-700/70">No hay informes.</p>
+  <Cargando v-if="cargando && !informes.length" />
+  <Vacio v-else-if="!informes.length" :icono="FileText" :texto="q.trim() || estado ? 'No hay informes que coincidan con el filtro.' : 'Todavía no hay informes.'">
+    <button v-if="q.trim() || estado" type="button" class="btn-borde min-h-11 flex-none text-sm" @click="((q = ''), (estado = ''))">Quitar filtros</button>
+  </Vacio>
 
   <ul class="grid gap-2.5 lg:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]">
     <li v-for="i in informes" :key="i.id">
@@ -55,12 +58,11 @@ onBeforeUnmount(() => clearTimeout(temporizador))
             <EstadoBadge :estado="i.estado" />
           </span>
         </span>
-        <strong class="text-base leading-snug break-words text-brand-900">{{ i.titulo }}</strong>
+        <strong class="min-w-0 text-base leading-snug wrap-anywhere text-brand-900">{{ i.titulo }}</strong>
         <span class="grid gap-1 sm:grid-cols-2">
           <Dato :icono="Building2" etiqueta="Cliente">{{ i.cliente }}</Dato>
-          <Dato :icono="Tag" etiqueta="Tipo">{{ i.tipo }}</Dato>
           <Dato :icono="CalendarDays" etiqueta="Fecha">{{ fechaCorta(i.fecha) }}</Dato>
-          <Dato v-if="i.responsable || mostrarAutor" :icono="UserRound" etiqueta="Responsable">{{ i.responsable }}<template v-if="i.responsable && mostrarAutor"> · </template><template v-if="mostrarAutor">por {{ i.autor }}</template></Dato>
+          <Dato v-if="i.responsable" :icono="UserRound" etiqueta="Responsable">{{ i.responsable }}</Dato>
         </span>
       </button>
     </li>

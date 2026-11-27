@@ -58,8 +58,8 @@ const { fondoIngreso } = useConfiguracion()
         </label>
         <p class="text-xs text-brand-700/80">Mínimo 10 caracteres, con letras y números, y sin tu nombre de usuario. Al cambiarla se cierran tus otras sesiones.</p>
 
-        <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
-        <button class="btn-acento" :disabled="cargando">{{ cargando ? 'Guardando…' : 'Guardar clave' }}</button>
+        <p v-if="error" class="aviso-error">{{ error }}</p>
+        <button class="btn" :disabled="cargando">{{ cargando ? 'Guardando…' : 'Guardar clave' }}</button>
         <button v-if="obligatorio" type="button" class="min-h-11 text-sm font-semibold text-brand-700" @click="logout">Salir</button>
       </form>
     </div>

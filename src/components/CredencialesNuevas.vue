@@ -34,8 +34,8 @@ async function copiar() {
         <dd class="font-mono text-base font-bold break-all text-brand-900">{{ clave }}</dd>
       </div>
     </dl>
-    <p class="text-xs text-brand-700/80">{{ deRoot ? 'Se puede restablecer desde Empresas > Superadministrador.' : 'Es su número de cédula: se puede volver a restablecer desde la lista de usuarios.' }}</p>
-    <div class="flex gap-2">
+    <p class="text-xs text-brand-700/80">{{ deRoot ? 'Se puede restablecer desde Empresas > Superadministrador.' : 'Es su número de cédula: se puede volver a restablecer desde su tarjeta, con «Restablecer clave».' }}</p>
+    <div class="pie-fijo !flex sm:justify-end">
       <button type="button" class="btn-borde min-h-11" @click="copiar">
         <Check v-if="copiado" :size="18" aria-hidden="true" />
         <Copy v-else :size="18" aria-hidden="true" />

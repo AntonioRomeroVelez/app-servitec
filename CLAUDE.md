@@ -24,7 +24,7 @@ La base de datos es Google Sheets (decisión del dueño, 26-11-2026). El código
 npm run dev            # servidor de desarrollo (vite --host)
 npm run build          # compila a dist/ (genera service worker y manifiesto)
 npm run preview        # sirve dist/
-npm run test:gs        # todas las pruebas (node --test apps-script/test/*.test.js); hoy 168
+npm run test:gs        # todas las pruebas (node --test apps-script/test/*.test.js); hoy 186
 node --test apps-script/test/empresas.test.js     # una sola suite
 node --test --test-name-pattern="texto" apps-script/test/flujo.test.js   # una sola prueba
 npm run servidor:local # Code.gs real sobre HTTP en el puerto 5400 (/__red?estado=off|on, /__hoja?nombre=...)
@@ -69,6 +69,7 @@ ServiTec - Empresas/ Nombre de la empresa/
 ### Backend: `apps-script/Code.gs`
 
 - `doPost` con acciones; `handle_` despacha por rol (`accionesRoot_`, `accionesSuperadmin_` y el resto para admin y técnico). Una acción nueva debe permitirse en el despacho de cada rol que la use.
+- `conCache_` guarda la respuesta de `dashboard_resumen` y de los listados de visitas, informes y clientes (120 s); toda acción que no esté en `ES_LECTURA` estrena versión al terminar. Una escritura nueva fuera de `doPost` debe llamar a `olvidarDatos_`.
 - Lecturas con `CacheService` (usuarios, empresas, tokens `t_`, bloqueo `f_`, configuración). `LockService` solo en escrituras: las lecturas van en la regex `ES_LECTURA`. Creaciones idempotentes con UUID del cliente.
 - Sesión `idUsuario:versionSesion`; hash `v2:` (SHA-256 × 600 con sal); bloqueo tras intentos fallidos; cambio de clave obligatorio. Una empresa deshabilitada corta el acceso a sus usuarios.
 - Los textos que empiezan por `= + - '` se guardan con apóstrofo para que Sheets no los tome como fórmula.
@@ -87,12 +88,17 @@ El modo demo no tiene empresas ni root: usa un superadmin y un admin locales.
 ### Frontend: `src/`
 
 - `App.vue`: sin router (ref `vista`), menú según rol (`arbol`); root y superadmin (`sinOperacion` de `useAuth`) no cargan visitas, informes ni avisos.
+- Carga: `call(accion, datos, { previo })` entrega primero la copia guardada y comparte las lecturas iguales en curso; `BarraCarga.vue` se muestra mientras haya consultas (`carga.js`) y cada vista usa `Cargando.vue` hasta tener datos.
 - `offline/`: IndexedDB, cola de cambios con ids generados en el cliente y sincronización automática.
+- Diseño común a todas las vistas: crear con `BotonNuevo.vue` (flotante; es el único uso del color de acento en botones); acción principal `btn`, secundaria `btn-borde`, discreta `btn-texto`; en tarjetas, una acción principal y el resto como `btn-icono` con `aria-label`. Vacíos con `Vacio.vue`, carga con `Cargando.vue`, errores con `aviso-error` y formularios con `PieFormulario.vue` (Cancelar y Guardar fijos abajo).
 - Confirmaciones con `confirmar()` (`useConfirmar.js`) en toda acción que cambia o borra; avisos con `useToast.js`. No usar `confirm()` ni `alert()`.
 - Listas: `BarraFiltros.vue` y `Paginador.vue`; se reparten en columnas con `lg:grid-cols-[repeat(auto-fit,minmax(24rem,1fr))]`. Tarjetas con `Dato.vue`, `Avatar.vue` y `bordeDeEstado` (`estados.js`).
-- Altas en `Modal.vue` (se cierra con X o Escape, no al tocar el fondo; con ventanas apiladas, Escape cierra solo la de encima).
-- Informe (`FormInforme.vue`): empieza con dos actividades vacías; los dos primeros ítems del tipo de visita solo son texto de ayuda. Resultados Cumple / No cumple / Falla (`na` solo en informes antiguos). Para finalizar, cada actividad con descripción y resultado. Se guarda como JSON en `checklist`. La firma se dibuja en `FirmaModal.vue` y se guarda recortada como PNG pequeño.
+- Altas en `Modal.vue`, siempre a pantalla completa; el contenido es un `form` o `div` y sus botones van en `pie-fijo` o `PieFormulario.vue`; en computadora los campos se reparten en columnas (se cierra con X o Escape, no al tocar el fondo; con ventanas apiladas, Escape cierra solo la de encima).
+- Todo formulario nuevo se registra con `useSinGuardar` (`composables/useSinGuardar.js`): sus botones de cerrar usan `salir()` y la navegación de `App.vue` usa `puedeSalir()`, que preguntan «¿Salir sin guardar?» solo si hay cambios.
+- Informe (`FormInforme.vue`): empieza con dos actividades vacías; los dos primeros ítems del tipo de visita solo son texto de ayuda. Resultados Cumple / No cumple / Falla (`na` solo en informes antiguos). Para finalizar, al menos una actividad, y cada una con descripción y resultado (los finalizados antiguos sin actividades se pueden seguir corrigiendo). Se guarda como JSON en `checklist`. La firma se dibuja en `FirmaModal.vue` y se guarda recortada como PNG pequeño.
 - PDF: `pdfInforme.js` (jsPDF, carga diferida), con los datos y colores de la empresa y las opciones de Ajustes; `informeEjemplo.js` genera la vista previa.
+- Mapa (`mapa.js`, `MapaModal.vue`): Leaflet + OpenStreetMap, gratis y sin clave (decisión del dueño); el punto va en la columna `ubicacion` de `Visitas` ("lat,lng", validado también en `Code.gs`, `asegurarUbicacion_` completa hojas antiguas). Nominatim: máximo 1 consulta por segundo y sin autocompletar.
+- WhatsApp (solo enlace `wa.me`, sin API de Meta por decisión del dueño): plantillas por empresa que administra su superadmin; envían y ven el historial solo los administradores; el estado es `Preparado` o `Fallido`, nunca «enviado». Reglas en `whatsapp.js` y repetidas en `Code.gs` (`whatsapp_`, hay pruebas de que coinciden); modo demo en `whatsappDemo.js`. Hojas `Plantillas WhatsApp` y `Envíos WhatsApp` por empresa (se crean solas) y sección `whatsapp` de la configuración. Los emojis van solo dentro del mensaje.
 - Marca: `tema` = `{ primario, acento, encabezado, fondo }`; imágenes en las secciones `logo`, `logoClaro`, `fondoImagen` (data URL de hasta 45.000 caracteres: una celda). Piezas: `tema.js` (paleta, `--color-encabezado`, `estiloFondo`), `colores.js` (colores desde el logo), `VistaPreviaMarca.vue`. Antes de ingresar, `configuracion_get { empresa }` entrega solo la marca (`marcaPublica_`); el dispositivo recuerda la empresa del enlace `?empresa=` o del último ingreso.
 - Estilos: Tailwind v4 con `@theme` y `@utility` (`campo`, `etiqueta`, `btn`, `btn-borde`, `btn-peligro`, `btn-acento`, `tarjeta`). No usar `@apply` con clases propias.
 

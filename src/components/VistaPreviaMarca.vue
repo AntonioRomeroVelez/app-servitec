@@ -23,7 +23,7 @@ const encabezado = computed(() => ({ backgroundColor: props.tema.encabezado || '
         <div class="grid w-full max-w-52 gap-2 rounded-xl bg-white p-3">
           <span class="h-6 rounded-lg border border-brand-200" />
           <span class="h-6 rounded-lg border border-brand-200" />
-          <span class="rounded-lg bg-acento py-1 text-center text-xs font-semibold text-acento-texto">Entrar</span>
+          <span class="rounded-lg bg-brand-600 py-1 text-center text-xs font-semibold text-white">Entrar</span>
         </div>
       </div>
     </figure>

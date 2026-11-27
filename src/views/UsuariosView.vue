@@ -1,6 +1,10 @@
 <script setup>
+import BotonNuevo from '../components/BotonNuevo.vue'
+import Cargando from '../components/Cargando.vue'
+import Vacio from '../components/Vacio.vue'
+import PieFormulario from '../components/PieFormulario.vue'
 import { reactive, ref, computed, watch, onMounted } from 'vue'
-import { Plus, KeyRound, Pencil, Trash2, Phone, MapPin, Mail, IdCard, Briefcase } from 'lucide-vue-next'
+import { KeyRound, Pencil, Power, Trash2, Users, Phone, MapPin, Mail, IdCard, Briefcase } from 'lucide-vue-next'
 import { useUsuarios } from '../composables/useUsuarios'
 import { useAuth, ROLES } from '../composables/useAuth'
 import { confirmar } from '../composables/useConfirmar'
@@ -14,6 +18,7 @@ import FormularioPersona from '../components/FormularioPersona.vue'
 import CredencialesNuevas from '../components/CredencialesNuevas.vue'
 import { usePaginaLocal } from '../composables/usePaginaLocal'
 import { call } from '../api'
+import { useSinGuardar } from '../composables/useSinGuardar'
 import Avatar from '../components/Avatar.vue'
 import Dato from '../components/Dato.vue'
 import { ETIQUETA_ROL, CLASE_ROL } from '../estados'
@@ -26,6 +31,7 @@ const rolesPermitidos = computed(() => ROLES.filter((r) => (esSuper.value ? r ==
 const puedeCambiar = (u) => u.id === yo.value.id || esSuper.value || !u.propietario
 
 const aviso = ref('')
+const persona = computed(() => (esSuper.value ? 'administrador' : 'usuario')) // el superadmin solo ve administradores
 
 // El servidor ve todos los usuarios de la plataforma: él sugiere el usuario y dice si uno está libre
 const sugerir = (nombre, cedula) => call('usuarios_sugerir', { nombre, cedula })
@@ -35,9 +41,12 @@ const disponible = (usuario) => call('usuarios_disponible', { usuario })
 const nuevo = reactive({ ...personaVacia(), rol: 'tecnico' })
 const mostrarForm = ref(false)
 const credenciales = ref(null) // { nombre, usuario, clave } tras crear la cuenta (la clave temporal es la cédula)
+let altaOriginal = ''
+const salirDeAlta = useSinGuardar(() => mostrarForm.value && !credenciales.value && JSON.stringify(nuevo) !== altaOriginal)
 
 function abrirAlta() {
   Object.assign(nuevo, personaVacia(), { rol: rolesPermitidos.value[0] })
+  altaOriginal = JSON.stringify(nuevo)
   aviso.value = ''
   credenciales.value = null
   mostrarForm.value = true
@@ -54,7 +63,8 @@ async function agregar() {
     /* el error se muestra en el formulario */
   }
 }
-const cerrarAlta = () => {
+const cerrarAlta = async () => {
+  if (!(await salirDeAlta())) return
   mostrarForm.value = false
   credenciales.value = null
 }
@@ -62,9 +72,13 @@ const cerrarAlta = () => {
 // ---------- Edición de los datos de un usuario (el usuario de ingreso no cambia) ----------
 const editando = ref(null)
 const edicion = reactive({ ...personaVacia(), rol: 'tecnico' })
+let edicionOriginal = ''
+const salirDeEdicion = useSinGuardar(() => !!editando.value && JSON.stringify(edicion) !== edicionOriginal)
+const cerrarEdicion = async () => (await salirDeEdicion()) && (editando.value = null)
 
 function abrirEdicion(u) {
   Object.assign(edicion, personaVacia(), { nombre: u.nombre, cedula: u.cedula, correo: u.correo, telefono: u.telefono, ciudad: u.ciudad, direccion: u.direccion, cargo: u.cargo, rol: u.rol })
+  edicionOriginal = JSON.stringify(edicion)
   editando.value = u
   aviso.value = ''
 }
@@ -147,7 +161,7 @@ onMounted(() => cargar().catch(() => {}))
 </script>
 
 <template>
-  <BarraFiltros v-model="q" placeholder="Buscar nombre, usuario, cédula o ciudad" :activos="(rol ? 1 : 0) + (estado ? 1 : 0)">
+  <BarraFiltros v-model="q" placeholder="Buscar usuario" :activos="(rol ? 1 : 0) + (estado ? 1 : 0)">
     <template #filtros>
       <select v-model="rol" class="campo !min-h-10 !py-1.5 text-sm" aria-label="Filtrar por rol">
         <option value="">Todos los roles</option>
@@ -159,23 +173,16 @@ onMounted(() => cargar().catch(() => {}))
         <option value="inactivos">Solo inactivos</option>
       </select>
     </template>
-    <template #acciones>
-      <button class="btn-acento !min-h-10 !px-3 flex-none" aria-label="Nuevo usuario" @click="abrirAlta">
-        <Plus :size="18" aria-hidden="true" />
-        <span class="sr-only sm:not-sr-only">Nuevo</span>
-      </button>
-    </template>
   </BarraFiltros>
 
-  <p v-if="(error || aviso) && !mostrarForm && !editando" class="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso || error }}</p>
+  <p v-if="(error || aviso) && !mostrarForm && !editando" class="aviso-error mb-3">{{ aviso || error }}</p>
 
   <!-- Alta de usuario (modal) -->
-  <Modal v-if="mostrarForm" :titulo="credenciales ? 'Usuario creado' : 'Nuevo usuario'" @cerrar="cerrarAlta">
+  <Modal v-if="mostrarForm" :titulo="credenciales ? (esSuper ? 'Administrador creado' : 'Usuario creado') : `Nuevo ${persona}`" @cerrar="cerrarAlta">
     <CredencialesNuevas v-if="credenciales" v-bind="credenciales" @listo="cerrarAlta" />
-    <form v-else class="grid gap-3" @submit.prevent="agregar">
+    <form v-else @submit.prevent="agregar">
       <FormularioPersona :form="nuevo" :roles="rolesPermitidos" nueva-cuenta :usuarios-existentes="usuarios.map((u) => u.usuario)" :sugerir="sugerir" :disponible="disponible" />
-      <p v-if="aviso || error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso || error }}</p>
-      <button class="btn" :disabled="cargando">{{ cargando ? 'Creando…' : 'Crear usuario' }}</button>
+      <PieFormulario :texto="`Crear ${persona}`" :cargando="cargando" :error="aviso || error || ''" @cancelar="cerrarAlta" />
     </form>
   </Modal>
 
@@ -185,15 +192,11 @@ onMounted(() => cargar().catch(() => {}))
   </Modal>
 
   <!-- Edición de datos (modal) -->
-  <Modal v-if="editando" :titulo="`Datos de @${editando.usuario}`" @cerrar="editando = null">
-    <form class="grid gap-3" @submit.prevent="guardarEdicion">
+  <Modal v-if="editando" :titulo="`Datos de @${editando.usuario}`" @cerrar="cerrarEdicion">
+    <form @submit.prevent="guardarEdicion">
       <FormularioPersona :form="edicion" :roles="editando.id !== yo.id ? rolesPermitidos : null" editando />
       <p class="text-xs text-brand-700/80">El usuario de ingreso (@{{ editando.usuario }}) no cambia aunque se modifique el nombre.</p>
-      <p v-if="aviso || error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso || error }}</p>
-      <div class="flex gap-2">
-        <button type="button" class="btn-borde min-h-11" @click="editando = null">Cancelar</button>
-        <button class="btn min-h-11" :disabled="cargando">Guardar</button>
-      </div>
+      <PieFormulario texto="Guardar cambios" :cargando="cargando" :error="aviso || error || ''" @cancelar="cerrarEdicion" />
     </form>
   </Modal>
 
@@ -202,7 +205,7 @@ onMounted(() => cargar().catch(() => {}))
       <div class="flex items-start gap-3">
         <Avatar :nombre="u.nombre" :inactivo="!u.activo" />
         <div class="grid min-w-0 flex-1 gap-0.5">
-          <strong class="text-base leading-snug break-words text-brand-900">{{ u.nombre }}</strong>
+          <strong class="text-base leading-snug wrap-anywhere text-brand-900">{{ u.nombre }}</strong>
           <p class="text-sm text-brand-700">@{{ u.usuario }}</p>
         </div>
         <span class="flex shrink-0 flex-col items-end gap-1">
@@ -219,28 +222,28 @@ onMounted(() => cargar().catch(() => {}))
         <Dato v-if="u.correo" :icono="Mail" etiqueta="Correo" ajustar>{{ u.correo }}</Dato>
         <Dato v-if="u.direccion" :icono="MapPin" etiqueta="Dirección" ajustar>{{ u.direccion }}</Dato>
       </div>
-      <div v-if="puedeCambiar(u)" class="flex flex-wrap gap-2">
-        <button class="btn-borde min-h-10 text-sm" @click="abrirEdicion(u)">
+      <div v-if="puedeCambiar(u)" class="flex items-center gap-2">
+        <button class="btn-borde min-h-11 text-sm" @click="abrirEdicion(u)">
           <Pencil :size="16" aria-hidden="true" />
           Editar datos
         </button>
-        <button v-if="u.id !== yo.id" class="btn-borde min-h-10 text-sm" :aria-expanded="restableciendoId === u.id" @click="abrirRestablecer(u)">
-          <KeyRound :size="16" aria-hidden="true" />
-          Restablecer clave
-        </button>
-        <button v-if="u.id !== yo.id" class="min-h-10 flex-1 rounded-xl border text-sm font-semibold sm:flex-none sm:px-4" :class="u.activo ? 'border-red-600 text-red-700' : 'border-emerald-600 text-emerald-700'" @click="alternar(u)">
-          {{ u.activo ? 'Desactivar' : 'Activar' }}
-        </button>
-        <button v-if="u.id !== yo.id" class="btn-peligro min-h-10 text-sm" @click="borrar(u)">
-          <Trash2 :size="16" aria-hidden="true" />
-          Eliminar
-        </button>
+        <template v-if="u.id !== yo.id">
+          <button class="btn-icono sm:ml-auto" :class="{ 'bg-brand-100': restableciendoId === u.id }" :aria-expanded="restableciendoId === u.id" :aria-label="`Restablecer la clave de ${u.nombre}`" title="Restablecer clave" @click="abrirRestablecer(u)">
+            <KeyRound :size="18" aria-hidden="true" />
+          </button>
+          <button class="btn-icono" :class="{ '!border-emerald-600 !text-emerald-700': !u.activo }" :aria-label="`${u.activo ? 'Desactivar' : 'Activar'} a ${u.nombre}`" :title="u.activo ? 'Desactivar' : 'Activar'" @click="alternar(u)">
+            <Power :size="18" aria-hidden="true" />
+          </button>
+          <button class="flex size-11 shrink-0 items-center justify-center rounded-xl text-red-700 active:bg-red-50" :aria-label="`Eliminar a ${u.nombre}`" title="Eliminar" @click="borrar(u)">
+            <Trash2 :size="18" aria-hidden="true" />
+          </button>
+        </template>
       </div>
 
       <div v-if="restableciendoId === u.id" class="grid gap-2 rounded-xl bg-brand-50 p-3">
         <template v-if="u.cedula">
           <p class="text-sm text-brand-800">La clave volverá a ser su número de cédula (<b class="font-mono">{{ u.cedula }}</b>). Deberá cambiarla al ingresar y se cerrarán sus sesiones abiertas.</p>
-          <p v-if="error" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ error }}</p>
+          <p v-if="error" class="aviso-error">{{ error }}</p>
           <div class="flex gap-2">
             <button type="button" class="btn-borde min-h-11" @click="restableciendoId = null">Cancelar</button>
             <button class="btn min-h-11" :disabled="cargando" @click="restablecer(u)">Restablecer a la cédula</button>
@@ -251,7 +254,7 @@ onMounted(() => cargar().catch(() => {}))
             <CampoClave v-model="claveTemporal" autocomplete="new-password" required minlength="10" />
           </label>
           <p class="text-xs text-brand-700/80">Deberá cambiarla al ingresar y se cerrarán sus sesiones abiertas. Agrégale la cédula desde "Editar datos" para usarla como clave temporal.</p>
-          <p v-if="aviso" class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{{ aviso }}</p>
+          <p v-if="aviso" class="aviso-error">{{ aviso }}</p>
           <div class="flex gap-2">
             <button type="button" class="btn-borde min-h-11" @click="restableciendoId = null">Cancelar</button>
             <button class="btn min-h-11" :disabled="cargando">Guardar</button>
@@ -261,6 +264,8 @@ onMounted(() => cargar().catch(() => {}))
     </li>
   </ul>
 
-  <p v-if="!filtrados.length" class="py-8 text-center text-brand-700/70">No hay usuarios que coincidan.</p>
+  <Cargando v-if="cargando && !usuarios.length" />
+  <Vacio v-else-if="!filtrados.length" :icono="Users" :texto="`No hay ${esSuper ? 'administradores' : 'usuarios'} que coincidan.`" />
+  <BotonNuevo :texto="`Nuevo ${persona}`" @click="abrirAlta" />
   <Paginador :total="pag.total.value" :offset="pag.offset.value" :limite="pag.limite" @ir="pag.ir" />
 </template>

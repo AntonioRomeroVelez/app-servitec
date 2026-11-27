@@ -57,10 +57,10 @@ const firmaEjemplo = () =>
     c.stroke()
   })
 
-/** Genera y descarga el PDF de ejemplo. `logo` es el data URL a usar (puede estar vacío). */
-export async function descargarEjemplo(config, logo) {
+/** Genera el PDF de ejemplo y lo devuelve como archivo (Blob). `logo` es el data URL a usar (puede estar vacío). */
+export async function generarEjemplo(config, logo) {
   const [{ generarPdfInforme }, { medirImagen }] = await Promise.all([import('./pdfInforme.js'), import('./imagen.js')])
   const logoMedido = logo ? await medirImagen(logo, { aPng: true }).catch(() => null) : null
   const doc = await generarPdfInforme({ ...datosEjemplo(config), logo: logoMedido, fotos: [fotoEjemplo(1), fotoEjemplo(2)], firma: firmaEjemplo() })
-  doc.save('Informe-de-ejemplo.pdf')
+  return doc.output('blob')
 }
