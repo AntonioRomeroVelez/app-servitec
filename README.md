@@ -215,7 +215,7 @@ No insertes ni reordenes columnas en las hojas, ni ordenes las filas a mano: el 
 npm run test:gs
 ```
 
-Son 167 pruebas: login, bloqueo y cambio obligatorio de clave, permisos por rol, flujo de estados, informes (numeración y cierre), fotos y carpetas de Drive, paginación, notificaciones y correos, recordatorios, idempotencia, clientes, bitácora y formatos de fecha, configuración y colores, el modo sin conexión completo (capa real + IndexedDB simulado + red que se corta o pierde respuestas) y una prueba de escala con 20.000 informes que imprime cuántas celdas lee cada operación. No miden la latencia real de Google; sirven para comprobar la lógica sin publicar el script.
+Son 168 pruebas: login, bloqueo y cambio obligatorio de clave, permisos por rol, flujo de estados, informes (numeración y cierre), fotos y carpetas de Drive, paginación, notificaciones y correos, recordatorios, idempotencia, clientes, bitácora y formatos de fecha, configuración y colores, el modo sin conexión completo (capa real + IndexedDB simulado + red que se corta o pierde respuestas) y una prueba de escala con 20.000 informes que imprime cuántas celdas lee cada operación. No miden la latencia real de Google; sirven para comprobar la lógica sin publicar el script.
 
 ## Informes
 

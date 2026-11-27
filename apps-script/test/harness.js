@@ -186,6 +186,12 @@ export function crearEntorno() {
     return libro.getSheetByName(nombre)
   }
 
+  // Como Google: las claves del caché no pueden pasar de 250 caracteres
+  const claveCache = (k) => {
+    if (String(k).length > 250) throw new Error('Argumento demasiado grande: key')
+    return k
+  }
+
   const ctx = {
     console,
     Logger: { log: (m) => logs.push(String(m)) },
@@ -213,11 +219,11 @@ export function crearEntorno() {
     CacheService: {
       getScriptCache: () => ({
         get: (k) => {
-          const e = cacheMapa.get(k)
+          const e = cacheMapa.get(claveCache(k))
           return e && e.expira > reloj ? e.valor : null
         },
-        put: (k, v, ttl = 600) => cacheMapa.set(k, { valor: String(v), expira: reloj + ttl }),
-        remove: (k) => cacheMapa.delete(k),
+        put: (k, v, ttl = 600) => cacheMapa.set(claveCache(k), { valor: String(v), expira: reloj + ttl }),
+        remove: (k) => cacheMapa.delete(claveCache(k)),
       }),
     },
     LockService: {

@@ -82,6 +82,7 @@ const ESTADOS_VISITA = ['Programada', 'Aceptada', 'En curso', 'Realizada', 'Canc
 // Cambios de estado que puede hacer un técnico (un administrador puede poner cualquiera)
 const TRANSICIONES_TECNICO = { Programada: ['Aceptada', 'Cancelada'], Aceptada: ['En curso', 'Cancelada'], 'En curso': ['Realizada', 'Cancelada'] }
 const ESTADOS_CON_INFORME = ['Aceptada', 'En curso', 'Realizada'] // el técnico crea informes solo desde estos estados
+const MAX_TOKEN = 100 // los de esta app miden 72 caracteres
 const TOKEN_TTL = 21600 // segundos (máximo de CacheService: 6 h)
 const USUARIOS_TTL = 300 // caché de la tabla de usuarios (se invalida al modificarla)
 
@@ -1526,6 +1527,9 @@ function cambiarClave_(req, yo, cache) {
 
 function handle_(req, us) {
   const cache = CacheService.getScriptCache()
+  // Un token ajeno (p. ej. la sesión larga que el navegador guardó de otra versión) se descarta: CacheService no admite
+  // claves de más de 250 caracteres y fallaría hasta el inicio de sesión.
+  if (String(req.token || '').length > MAX_TOKEN) req.token = ''
 
   if (req.action === 'logout') {
     if (req.token) cache.remove('t_' + req.token) // el token deja de valer en el servidor, no solo en el navegador

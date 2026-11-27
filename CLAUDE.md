@@ -24,7 +24,7 @@ La base de datos es Google Sheets (decisión del dueño, 26-11-2026). El código
 npm run dev            # servidor de desarrollo (vite --host)
 npm run build          # compila a dist/ (genera service worker y manifiesto)
 npm run preview        # sirve dist/
-npm run test:gs        # todas las pruebas (node --test apps-script/test/*.test.js); hoy 167
+npm run test:gs        # todas las pruebas (node --test apps-script/test/*.test.js); hoy 168
 node --test apps-script/test/empresas.test.js     # una sola suite
 node --test --test-name-pattern="texto" apps-script/test/flujo.test.js   # una sola prueba
 npm run servidor:local # Code.gs real sobre HTTP en el puerto 5400 (/__red?estado=off|on, /__hoja?nombre=...)

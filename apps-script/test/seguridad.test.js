@@ -231,3 +231,13 @@ test('diagnosticoUsuarios: indica si el usuario existe y si la clave temporal co
   assert.ok(!texto.includes('temporal1')) // nunca imprime la clave
   assert.ok(!/v2:[0-9a-f]{20}/.test(texto)) // ni el hash
 })
+
+test('una sesión guardada de otra versión (token larguísimo) pide ingresar de nuevo y no impide entrar', () => {
+  const env = crearEntorno()
+  const viejo = 'eyJ' + 'a'.repeat(900)
+  assert.equal(env.llamar('me', {}, viejo).code, 'AUTH')
+  assert.equal(env.llamar('visitas_list', {}, viejo).code, 'AUTH')
+  assert.equal(env.llamar('configuracion_get', {}, viejo).ok, true)
+  assert.equal(env.llamar('logout', {}, viejo).ok, true)
+  assert.equal(env.llamar('login', { usuario: 'superadmin', clave: CLAVE_INICIAL }, viejo).ok, true)
+})
